@@ -40,6 +40,9 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
     private var receiverThread: Thread? = null
     private val receiveBuffer = ByteArrayOutputStream()
 
+    private var autoReconnectJob: Job? = null
+    private val _deviceState = MutableStateFlow(PocketMasterDeviceState())
+
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
     override val chain: StateFlow<IntArray> = _deviceState.map { it.chain }.asStateFlow()
     override val bypass: StateFlow<ByteArray> = _deviceState.map { it.bypass }.asStateFlow()
@@ -47,9 +50,6 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
     override val name: StateFlow<String> = _deviceState.map { it.name }.asStateFlow()
     override val globalLevels: StateFlow<IntArray> = _deviceState.map { it.globalLevels }.asStateFlow()
     override val deviceState: StateFlow<PocketMasterDeviceState> = _deviceState.asStateFlow()
-
-    private var autoReconnectJob: Job? = null
-    private val _deviceState = MutableStateFlow(PocketMasterDeviceState())
 
     fun onMidiDeviceConnected(device: MidiDevice) {
         scope.launch {

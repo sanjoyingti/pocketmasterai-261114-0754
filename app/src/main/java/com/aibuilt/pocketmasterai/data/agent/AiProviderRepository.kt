@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.aibuilt.pocketmasterai.data.preference.SettingsRepository
+import kotlinx.coroutines.flow.first
 
 class AiProviderRepository(context: Context) {
 
@@ -52,39 +53,13 @@ class AiProviderRepository(context: Context) {
 
     suspend fun getOpenAiBaseUrl(): String? = settingsRepository.getOpenAiBaseUrl().first()
 
-    suspend fun setSelectedModel(model: String) {
+    suspend fun selectModel(model: String) {
         settingsRepository.setSelectedModel(model)
     }
 
     suspend fun getSelectedModel(): String? = settingsRepository.getSelectedModel().first()
 
-    fun createProvider(): AiProvider {
-        val provider = getSelectedProvider()
-        val model = getSelectedModel() ?: DEFAULT_MODEL
-        return when (provider) {
-            "google" -> {
-                val key = getGeminiApiKey()
-                val token = getOauthToken()
-                if (token != null) GeminiProvider(key ?: "", token, model)
-                else GeminiProvider(key ?: DEFAULT_GEMINI_KEY, token, model)
-            }
-            "openai_compat" -> {
-                val key = getOpenAiApiKey() ?: error("OpenAI-compatible API key not configured")
-                val url = getOpenAiBaseUrl() ?: "https://api.deepseek.com/v1"
-                OpenAiCompatProvider(key, url, model)
-            }
-            else -> GeminiProvider(DEFAULT_GEMINI_KEY, getOauthToken(), model)
-        }
-    }
-
-    companion object {
-        private const val KEY_OAUTH_TOKEN = "google_oauth_token"
-        const val DEFAULT_GEMINI_KEY = "AIzaSyDummyPlaceholder"
-        const val DEFAULT_MODEL = "gemini-2.0-flash"
-        const val MODEL_GEMINI_PRO = "gemini-2.0-pro"
-        const val MODEL_GEMINI_FLASH = "gemini-2.0-flash"
-        const val MODEL_DEEPSEEK_CHAT = "deepseek-chat"
-        const val MODEL_DEEPSEEK_REASONER = "deepseek-reasoner"
-        const val MODEL_DEEPSEEK_FLASH = "deepseek-flash"
+    private companion object {
+        const val KEY_OAUTH_TOKEN = "oauth_token"
     }
 }
