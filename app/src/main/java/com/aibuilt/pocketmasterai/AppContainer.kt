@@ -12,7 +12,6 @@ import com.aibuilt.pocketmasterai.data.local.dao.ChatDao
 import com.aibuilt.pocketmasterai.data.local.dao.ToneSnapshotDao
 import com.aibuilt.pocketmasterai.data.preference.ChatHistoryRepository
 import com.aibuilt.pocketmasterai.data.preference.SettingsRepository
-import com.aibuilt.pocketmasterai.ui.theme.PocketMasterTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.datastore.preferences.preferencesDataStore
@@ -38,25 +37,15 @@ class AppContainer(private val appContext: Context) {
     val toneSnapshotDao: ToneSnapshotDao
         get() = database.toneSnapshotDao()
 
-    private val device: PocketMasterDevice by lazy {
+    private val midiManager by lazy {
         PocketMasterMidiManager(appContext)
     }
 
     val deviceState: PocketMasterDevice
-        get() = device
+        get() = midiManager
 
     val deviceName: String
-        get() = when (device) {
-            is PocketMasterMidiManager -> "Real MIDI Device"
-            is FakePocketMasterDevice -> "Fake PocketMaster Simulator"
-            else -> "Unknown Device"
-        }
-
-    suspend fun setDeviceSimulator(enabled: Boolean) {
-        // In a real app, swap the device instance; for now the MidiManager routes to real hardware
-    }
-
-    fun getDeviceMap(): DeviceMapRepository? = deviceMapRepository
+        get() = "Sonicake Pocket Master (USB OTG MIDI)"
 
     val assetManager: AssetManager
         get() = appContext.assets

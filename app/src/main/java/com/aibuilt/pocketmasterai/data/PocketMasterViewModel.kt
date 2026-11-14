@@ -3,6 +3,7 @@ package com.aibuilt.pocketmasterai.data
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,9 +11,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class PocketMasterViewModel(private val container: PocketMasterContainer) : ViewModel() {
+class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
 
-    private val device = container.device
+    private val device = container.deviceState
 
     private val _connectionStatus = MutableStateFlow("Disconnected")
     val connectionStatus: StateFlow<String> = _connectionStatus.asStateFlow()
@@ -20,13 +21,13 @@ class PocketMasterViewModel(private val container: PocketMasterContainer) : View
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    private val _bypass = MutableStateFlow(device.bypass)
+    private val _bypass = MutableStateFlow(device.bypass.value)
     val bypass: StateFlow<ByteArray> = _bypass.asStateFlow()
 
-    private val _models = MutableStateFlow(device.models)
+    private val _models = MutableStateFlow(device.models.value)
     val models: StateFlow<ShortArray> = _models.asStateFlow()
 
-    private val _name = MutableStateFlow(device.name)
+    private val _name = MutableStateFlow(device.name.value)
     val name: StateFlow<String> = _name.asStateFlow()
 
     init {
@@ -61,7 +62,7 @@ class PocketMasterViewModel(private val container: PocketMasterContainer) : View
                 delay(2000L)
                 if (_isConnected.value) {
                     try {
-                        device.sendBytes(com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol.editBufferDumpRequest())
+                        device.sendBytes(PocketMasterProtocol.editBufferDumpRequest())
                     } catch (e: Exception) {
                         _connectionStatus.value = "Send failed: ${e.message}"
                         _isConnected.value = false
@@ -88,13 +89,13 @@ class PocketMasterViewModel(private val container: PocketMasterContainer) : View
         viewModelScope.launch {
             val current = device.bypass.value[block].toInt()
             val newBypass = (1 - current).toByte()
-            device.sendBytes(com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol.setBlockState(block, newBypass == 1))
+            device.sendBytes(PocketMasterProtocol.setBlockState(block, newBypass == 1))
         }
     }
 
     fun setModel(block: Int, modelId: Int) {
         viewModelScope.launch {
-            device.sendBytes(com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol.setBlockModel(block, modelId))
+            device.sendBytes(PocketMasterProtocol.setBlockModel(block, modelId))
         }
     }
 
@@ -120,7 +121,7 @@ class PocketMasterViewModel(private val container: PocketMasterContainer) : View
     }
 
     companion object {
-        class Factory(private val container: PocketMasterContainer) : ViewModelProvider.Factory {
+        class Factory(private val container: AppContainer) : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 return PocketMasterViewModel(container) as T
