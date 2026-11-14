@@ -15,8 +15,6 @@ class WebSearchService(private val context: Context) {
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    // DuckDuckGo instant answer / bang-free web search via their HTML search page.
-    // Uses the public DDG search form (no key required), then Jsoup parses the results.
     suspend fun searchDuckDuckGo(query: String): List<WebSearchResult> {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val request = Request.Builder()
@@ -38,7 +36,6 @@ class WebSearchService(private val context: Context) {
         return results.take(10)
     }
 
-    // Google Custom Search: requires a CSE engine ID (user enters it in Settings).
     suspend fun searchGoogle(query: String, engineId: String): List<WebSearchResult> {
         if (engineId.isBlank()) {
             return emptyList()
@@ -54,27 +51,23 @@ class WebSearchService(private val context: Context) {
         if (response.code != 200 || body.isNullOrBlank()) {
             return emptyList()
         }
-        // We do not use kotlinx-serialization here to keep imports minimal and avoid
-        // needing a JSON model class; a simple Jsoup-style extraction of the parsed object.
-        // Fallback to raw JSON text snippet extraction.
         return parseGoogleResults(body)
     }
 
     private fun parseGoogleResults(json: String): List<WebSearchResult> {
         val results = mutableListOf<WebSearchResult>()
-        // Extract items array: {"title":..., "link":..., "snippet":...}
         var i = 0
         while (i < json.length) {
-            val start = json.indexOf("{" , i)
+            val start = json.indexOf("{", i)
             if (start < 0) break
             val titleStart = json.indexOf("\"title\"", start)
             if (titleStart < 0) { i = start + 1; continue }
-            val title = extractString(json, titleStart + "\"title\"" .length)
+            val title = extractString(json, titleStart + "\"title\"".length)
             val linkStart = json.indexOf("\"link\"", start)
             val link = if (linkStart > start) extractString(json, linkStart + "\"link\"".length) else ""
             val snippetStart = json.indexOf("\"snippet\"", start)
             val snippet = if (snippetStart > start) extractString(json, snippetStart + "\"snippet\"".length) else ""
-            if (title.isNullOrBlank().not() || link.isNotEmpty()) {
+            if (title.isNotBlank() || link.isNotEmpty()) {
                 results.add(WebSearchResult(title ?: "Search result", snippet, link))
             }
             i = start + 1
@@ -90,7 +83,8 @@ class WebSearchService(private val context: Context) {
         while (end < json.length) {
             val c = json[end]
             if (escape) { escape = false; end++ }
-            else if (c == '\\') escape = true; else if (c == '"') break
+            else if (c == '\\') escape = true
+            else if (c == '"') break
             else end++
         }
         return if (end > q + 1) json.substring(q + 1, end) else null

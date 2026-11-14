@@ -9,6 +9,8 @@ class AgentToolExecutor(private val viewModel: PocketMasterViewModel) {
         data class Success(val message: String) : Result()
         data class Info(val message: String) : Result()
         data class Error(val message: String) : Result()
+
+        open fun message(): String = this.toString()
     }
 
     suspend fun execute(toolName: String, args: Map<String, Any>): Result {
@@ -38,9 +40,9 @@ class AgentToolExecutor(private val viewModel: PocketMasterViewModel) {
             }
             "set_parameter" -> {
                 val block = args["block"] as? Int ?: -1
-                val param = (args["value"] as? Number)?.toInt() ?: 0
-                viewModel.setParameter(block, param)
-                Result.Success("Block $block param set to $param.")
+                val value = (args["value"] as? Number)?.toInt() ?: 0
+                viewModel.setParameter(block, 0, value.toShort())
+                Result.Success("Block $block parameter set to $value.")
             }
             "set_chain_reorder" -> {
                 Result.Info("Chain reorder tool available; blocks 0-8 reorder the signal path.")
@@ -51,7 +53,7 @@ class AgentToolExecutor(private val viewModel: PocketMasterViewModel) {
             "save_preset" -> {
                 val slot = args["presetSlot"] as? String ?: "P01"
                 val name = args["slotName"]?.toString() ?: "TONE"
-                viewModel.savePreset(slot, name)
+                viewModel.savePreset(slotToInt(slot), name)
                 Result.Success("Saved $name to $slot.")
             }
             "web_search" -> {
@@ -63,12 +65,19 @@ class AgentToolExecutor(private val viewModel: PocketMasterViewModel) {
                 Result.Info("Page fetch queued: $url")
             }
             "tone_snapshot" -> {
-                val snapshot = ToneSnapshot.emptyFor()
-                viewModel.captureToneSnapshot(snapshot)
-                Result.Success("Snapshot captured: ${snapshot.name}")
+                viewModel.captureToneSnapshot(ToneSnapshot.emptyFor())
+                Result.Success("Snapshot captured: ${ToneSnapshot.emptyFor().name}")
+            }
+            "undo_tone" -> {
+                viewModel.undoTone()
+                Result.Success("Undo request queued.")
             }
             else -> Result.Error("Unknown tool: $toolName")
         }
+    }
+
+    private fun slotToInt(slot: String): Int {
+        return slot.removeRange(0, 1).removePrefix("P").removePrefix("F").toIntOrNull() ?: 1
     }
 
     fun parameterJson(args: Map<String, Any>): String {

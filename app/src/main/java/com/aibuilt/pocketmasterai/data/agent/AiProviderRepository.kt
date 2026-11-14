@@ -1,65 +1,81 @@
 package com.aibuilt.pocketmasterai.data.agent
 
 import android.content.Context
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
-import com.aibuilt.pocketmasterai.data.preference.SettingsRepository
-import kotlinx.coroutines.flow.first
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+val Context.aiDataStore: DataStore<Preferences> by preferencesDataStore(name = "ai_provider_settings")
 
 class AiProviderRepository(context: Context) {
+    private val dataStore: DataStore<Preferences> = context.aiDataStore
 
-    private val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
-    private val securePrefs = EncryptedSharedPreferences.create(
-        context,
-        "ai_provider_secure_prefs",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    companion object {
+        private val KEY_PROVIDER = stringPreferencesKey("ai_provider")
+        private val KEY_SELECTED_MODEL = stringPreferencesKey("selected_model")
+        private val KEY_GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
+        private val KEY_OPENAI_API_KEY = stringPreferencesKey("openai_api_key")
+        private val KEY_OPENAI_BASE_URL = stringPreferencesKey("openai_base_url")
+        private val KEY_OAUTH_TOKEN = stringPreferencesKey("oauth_token")
+    }
+
+    val providers = listOf(
+        AiProviderChoice("google", "Google Gemini (Sign-In)", "Google Gemini via OAuth 2.0 / API key"),
+        AiProviderChoice("openai", "OpenAI-Compatible (DeepSeek / OpenRouter)", "Custom endpoint with API key")
     )
 
-    private val settingsRepository = SettingsRepository(context, context.dataStore)
+    fun getProviderChoices(): List<AiProviderChoice> = providers
 
-    suspend fun setGoogleSignedIn(token: String) {
-        securePrefs.edit().putString(KEY_OAUTH_TOKEN, token).apply()
-    }
+    fun getSelectedProvider(): Flow<String> =
+        dataStore.data.map { it[KEY_PROVIDER] ?: "google" }
 
-    suspend fun getOauthToken(): String? = securePrefs.getString(KEY_OAUTH_TOKEN, null)
+    fun getSelectedModel(): Flow<String?> =
+        dataStore.data.map { it[KEY_SELECTED_MODEL] }
 
-    suspend fun clearOAuth() {
-        securePrefs.edit().remove(KEY_OAUTH_TOKEN).apply()
-    }
+    fun getGeminiApiKey(): Flow<String?> =
+        dataStore.data.map { it[KEY_GEMINI_API_KEY] }
+
+    fun getOpenAiApiKey(): Flow<String?> =
+        dataStore.data.map { it[KEY_OPENAI_API_KEY] }
+
+    fun getOpenAiBaseUrl(): Flow<String?> =
+        dataStore.data.map { it[KEY_OPENAI_BASE_URL] }
+
+    fun getOauthToken(): Flow<String?> =
+        dataStore.data.map { it[KEY_OAUTH_TOKEN] }
 
     suspend fun selectProvider(provider: String) {
-        settingsRepository.setAiProvider(provider)
+        dataStore.edit { it[KEY_PROVIDER] = provider }
     }
 
-    suspend fun getSelectedProvider(): String = settingsRepository.getAiProvider().first()
+    suspend fun setSelectedModel(model: String) {
+        dataStore.edit { it[KEY_SELECTED_MODEL] = model }
+    }
 
     suspend fun setGeminiApiKey(key: String) {
-        settingsRepository.setGeminiApiKey(key)
+        dataStore.edit { it[KEY_GEMINI_API_KEY] = key }
     }
-
-    suspend fun getGeminiApiKey(): String? = settingsRepository.getGeminiApiKey().first()
 
     suspend fun setOpenAiApiKey(key: String) {
-        settingsRepository.setOpenAiApiKey(key)
+        dataStore.edit { it[KEY_OPENAI_API_KEY] = key }
     }
-
-    suspend fun getOpenAiApiKey(): String? = settingsRepository.getOpenAiApiKey().first()
 
     suspend fun setOpenAiBaseUrl(url: String) {
-        settingsRepository.setOpenAiBaseUrl(url)
+        dataStore.edit { it[KEY_OPENAI_BASE_URL] = url }
     }
 
-    suspend fun getOpenAiBaseUrl(): String? = settingsRepository.getOpenAiBaseUrl().first()
-
-    suspend fun selectModel(model: String) {
-        settingsRepository.setSelectedModel(model)
-    }
-
-    suspend fun getSelectedModel(): String? = settingsRepository.getSelectedModel().first()
-
-    private companion object {
-        const val KEY_OAUTH_TOKEN = "oauth_token"
+    suspend fun setOauthToken(token: String) {
+        dataStore.edit { it[KEY_OAUTH_TOKEN] = token }
     }
 }
+
+data class AiProviderChoice(
+    val key: String,
+    val displayName: String,
+    val description: String
+)

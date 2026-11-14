@@ -1,10 +1,8 @@
 package com.aibuilt.pocketmasterai.data.agent
 
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.sse.EventSource
-import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
 import java.util.concurrent.TimeUnit
 
 sealed class AiResponseEvent {
@@ -30,7 +28,19 @@ data class AiMessage(
     val content: String
 )
 
-// --- Google OAuth + Gemini REST provider ---
+private const val SYSTEM_PROMPT =
+    "You are an autonomous guitar tone agent for the Sonicake Pocket Master (QME-10) multi-effects processor. " +
+    "You control the device through tool calls. Always follow this workflow for song/solo requests: " +
+    "(1) web_search for the guitarist's exact rig, then (2) fetch_page on the best rig page, " +
+    "(3) map every pedal/amp/cab/mic/setting to the Pocket Master's 9-slot chain using only model IDs and parameters " +
+    "that exist in the device map, (4) set blocks, bypass, models, parameters, and chain order, (5) save to a user slot. " +
+    "Always emit a valid JSON object with fields: intent (a one-line description of what you're doing), " +
+    "tone (a JSON object with keys: chain=9-element block order array, blocks={\"0\":{\"model\":N,\"params\":{\"paramId\":value},\"bypassed\":bool}}). " +
+    "When the user says 'load the tone' or 'set all settings accordingly', emit a tool call for every hardware tool needed, " +
+    "in order: get_device_state, then set_chain_reorder, set_block_state for each block, set_block_model for each block, " +
+    "set_parameter for each affected parameter, set_global_levels, save_preset, then web_search/fetch_page first for tone research. " +
+    "Never invent model names or values outside the device map. Keep all tool args as JSON-serializable values (ints, strings, booleans)."
+
 class GeminiProvider(
     private val apiKey: String,
     private val oauthToken: String?,
@@ -46,9 +56,6 @@ class GeminiProvider(
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private val apiBase: String
-        get() = "https://generativelanguage.googleapis.com/v1beta"
-
     override suspend fun generate(
         messages: List<AiMessage>,
         tools: List<AgentToolDefinitions.ToolDef>,
@@ -57,63 +64,60 @@ class GeminiProvider(
         try {
             val systemMsg = AiMessage("system", SYSTEM_PROMPT)
             val allMessages = listOf(systemMsg) + messages
-            val contentParts = allMessages.map { part ->
+            val contents = allMessages.joinToString(",") { m ->
                 buildString {
-                    append("{\"role\": \"${part.role}\", \"parts\": [{\"text\": \"${part.content.replace("\\", "\\\\")}\"}]}")
+                    append("{\"role\":\"${m.role}\",\"parts\":[{\"text\":\"${m.content.escapeJson()}\"}]}")
                 }
             }
             val toolsDef = if (tools.isNotEmpty()) {
-                "{\"tools\": [{\"functionDeclarations\": [${tools.joinToString(", ") { "{\\\"name\\\": \\\"${it.name}\\\", \\\"description\\\": \\\"${it.description}\\\", \\\"parameters\\\": {\\\"type\\\": \\\"object\\\", \\\"properties\\\": {\\\"block\\\": {\\\"type\\\": \\\"integer\\\"}, \\\"modelId\\\": {\\\"type\\\": \\\"integer\\\"}, \\\"value\\\": {\\\"type\\\": \\\"integer\\\"}, \\\"presetSlot\\\": {\\\"type\\\": \\\"string\\\"}, \\\"query\\\": {\\\"type\\\": \\\"string\\\"}, \\\"url\\\": {\\\"type\\\": \\\"string\\\"}, \\\"bypassed\\\": {\\\"type\\\": \\\"boolean\\\"}, \\\"slotName\\\": {\\\"type\\\": \\\"string\\\"}, \\\"usbVolume\\\": {\\\"type\\\": \\\"integer\\\"}, \\\"mainVolume\\\": {\\\"type\\\": \\\"integer\\\"}, \\\"headphoneVolume\\\": {\\\"type\\\": \\\"integer\\\"}}}}]}}]}"
+                "{\"tools\":[{\"functionDeclarations\":[${tools.joinToString(",") { t ->
+                    "{\"name\":\"${t.name}\",\"description\":\"${t.description}\",\"parameters\":{\"type\":\"object\",\"properties\":{\"block\":{\"type\":\"integer\"},\"modelId\":{\"type\":\"integer\"},\"value\":{\"type\":\"integer\"},\"presetSlot\":{\"type\":\"string\"},\"query\":{\"type\":\"string\"},\"url\":{\"type\":\"string\"},\"bypassed\":{\"type\":\"boolean\"},\"slotName\":{\"type\":\"string\"},\"usbVolume\":{\"type\":\"integer\"},\"mainVolume\":{\"type\":\"integer\"},\"headphoneVolume\":{\"type\":\"integer\"}}}}"
+                }}]}}]"
             } else "null"
 
-            val bodyContent = buildString {
-                append("{\"contents\": [")
-                append(contentParts.joinToString(","))
-                append("], \"generationConfig\": {\"temperature\": 0.3, \"maxOutputTokens\": 4096, \"responseFormat\": \"json_object\"}, \"tools\": ${toolsDef}}")
-            }
-
-            val url = "$apiBase/models/${model.encodeURL()}:generateContent?key=${apiKey.encodeURL()}"
+            val body = "{\"contents\":[$contents],\"generationConfig\":{\"temperature\":0.3,\"maxOutputTokens\":4096},\"tools\":$toolsDef}"
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/${model.escapeUrl()}:generateContent?key=${apiKey.escapeUrl()}"
             val headers = mutableMapOf("Content-Type" to "application/json")
             if (oauthToken != null) headers["Authorization"] = "Bearer $oauthToken"
 
-            val request = okhttp3.Request.Builder()
+            val request = Request.Builder()
                 .url(url)
-                .post(bodyContent.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .headers(okhttp3.Headers.of(headers))
                 .build()
 
             val response = okHttpClient.newCall(request).execute()
-            val body = response.body?.string()
+            val responseBody = response.body?.string()
             response.close()
-            if (!response.isSuccessful || body.isNullOrBlank()) {
+            if (!response.isSuccessful || responseBody.isNullOrBlank()) {
                 onEvent(AiResponseEvent.Error("API error: ${response.code} ${response.message}"))
                 return
             }
 
-            parseGeminiResponse(body, onEvent)
+            parseGeminiResponse(responseBody!!, onEvent)
             onEvent(AiResponseEvent.Done)
         } catch (e: Exception) {
             onEvent(AiResponseEvent.Error(e.message ?: "Generation failed"))
         }
     }
 
-    private fun String.encodeURL(): String =
-        this.replace(" ", "%20").replace("<", "%3C").replace(">", "%3E").replace("&", "%26")
-            .replace("\"", "%22").replace("'", "%27").replace("+", "%2B")
-
     private fun parseGeminiResponse(body: String, onEvent: (AiResponseEvent) -> Unit) {
-        val start = body.indexOf('{')
-        val end = body.lastIndexOf('}')
-        val json = if (start >= 0 && end > start) body.substring(start, end + 1) else body
+        val json = extractObject(body) ?: return
         val functionCall = extractFunctionCall(json)
         if (functionCall != null) {
             onEvent(functionCall)
             return
         }
-        val text = extractText(json)
+        val text = extractTextFromJson(json)
         if (text.isNotEmpty()) {
             onEvent(AiResponseEvent.TextChunk(text))
         }
+    }
+
+    private fun extractObject(body: String): String? {
+        val start = body.indexOf('{')
+        val end = body.lastIndexOf('}')
+        return if (start >= 0 && end > start) body.substring(start, end + 1) else null
     }
 
     private fun extractFunctionCall(json: String): AiResponseEvent.ToolCall? {
@@ -128,14 +132,14 @@ class GeminiProvider(
         return AiResponseEvent.ToolCall(fname, args)
     }
 
-    private fun extractText(json: String): String {
+    private fun extractTextFromJson(json: String): String {
         val candidates = listOf(
             json.substringAfter("\"text\":\""),
-            json.substringAfter("\"candidates\": [{\"content\": {\"parts\": [{\"text\": \""),
-            json.substringAfter("\"content\": {\"parts\": [{\"text\": \"")
+            json.substringAfter("\"parts\":[{\"text\":\""),
+            json.substringAfter("\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"")
         )
-        val text = candidates.first { it.isNotBlank() }
-        val clean = text.takeWhile { it != '"' }.replace("\\n", "\n")
+        val text = candidates.firstOrNull { it.isNotBlank() } ?: return ""
+        val clean = text.takeWhile { it != '"' }.replace("\\n", "\n").replace("\\/", "/")
         return clean
     }
 
@@ -147,7 +151,8 @@ class GeminiProvider(
         while (end < json.length) {
             val c = json[end]
             if (escape) { escape = false; end++ }
-            else if (c == '\\') escape = true; else if (c == '"') break
+            else if (c == '\\') escape = true
+            else if (c == '"') break
             else end++
         }
         return if (end > q + 1) json.substring(q + 1, end) else null
@@ -164,16 +169,17 @@ class GeminiProvider(
             val name = json.substring(nameStart + 1, nameEnd)
             val colon = json.indexOf(':', nameEnd)
             val valueStart = json.indexOf('{', colon)
-            val valueEnd = json.indexOf('}', valueStart)
-            if (valueStart < 0 || valueEnd < 0) {
+            if (valueStart >= 0) {
+                val valueEnd = json.indexOf('}', valueStart)
+                if (valueEnd < 0) break
+                args[name] = parseFunctionArgs(json.substring(valueStart + 1, valueEnd))
+                pos = valueEnd + 1
+            } else {
                 val valStart = colon + 1
                 val valEnd = json.indexOf(',', valueStart)
                 val raw = json.substring(valStart, if (valEnd < 0) json.length else valEnd).trim()
                 args[name] = parseScalar(raw)
                 pos = if (valEnd < 0) json.length else valEnd + 1
-            } else {
-                args[name] = parseFunctionArgs(json.substring(valueStart + 1, valueEnd))
-                pos = valueEnd + 1
             }
         }
         return args
@@ -186,26 +192,24 @@ class GeminiProvider(
             t == "false" -> false
             t == "null" -> null
             try -> t.toInt()
-            catch (_: NumberFormatException) -> t.toDouble()
-            else -> raw
+            catch (_: NumberFormatException) -> try -> t.toDouble()
+            catch (_: NumberFormatException) -> t
+            else -> t
         }
     }
+
+    private fun String.escapeJson(): String =
+        this.replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+
+    private fun String.escapeUrl(): String =
+        this.replace(" ", "%20").replace("<", "%3C").replace(">", "%3E")
+            .replace("&", "%26").replace("\"", "%22")
 }
 
-private const val SYSTEM_PROMPT =
-    "You are an autonomous guitar tone agent for the Sonicake Pocket Master (QME-10) multi-effects processor. " +
-    "You control the device through tool calls. Always follow this workflow for song/solo requests: " +
-    "(1) web_search for the guitarist's exact rig, then (2) fetch_page on the best rig page, " +
-    "(3) map every pedal/amp/cab/mic/setting to the Pocket Master's 9-slot chain using only model IDs and parameters " +
-    "that exist in the device map, (4) set blocks, bypass, models, parameters, and chain order, (5) save to a user slot. " +
-    "Always emit a valid JSON object with fields: intent (a one-line description of what you're doing), " +
-    "tone (a JSON object with keys: chain=9-element block order array, blocks={\"0\":{\"model\":N,\"params\":{\"paramId\":value},\"bypassed\":bool}}). " +
-    "When the user says 'load the tone' or 'set all settings accordingly', emit a tool call for every hardware tool needed, " +
-    "in order: get_device_state, then set_chain_reorder, set_block_state for each block, set_block_model for each block, " +
-    "set_parameter for each affected parameter, set_global_levels, save_preset, then web_search/fetch_page first for tone research. " +
-    "Never invent model names or values outside the device map. Keep all tool args as JSON-serializable values (ints, strings, booleans)."
-
-// --- OpenAI-compatible provider (DeepSeek, OpenRouter, local LLMs) ---
 class OpenAiCompatProvider(
     private val apiKey: String,
     private val baseUrl: String,
@@ -230,52 +234,30 @@ class OpenAiCompatProvider(
         onEvent: (AiResponseEvent) -> Unit
     ) {
         try {
-            val allMessages = messages.map { m -> mapOf("role" to m.role, "content" to m.content) }
+            val allMessages = messages.map { m ->
+                "{\"role\":\"${m.role}\",\"content\":\"${m.content.escapeJson()}\"}"
+            }.joinToString(",")
             val toolsDef = if (tools.isNotEmpty()) {
                 tools.map { t ->
-                    mapOf(
-                        "type" to "function",
-                        "function" to mapOf(
-                            "name" to t.name,
-                            "description" to t.description,
-                            "parameters" to mapOf(
-                                "type" to "object",
-                                "properties" to mapOf(
-                                    "block" to mapOf("type" to "integer"),
-                                    "modelId" to mapOf("type" to "integer"),
-                                    "value" to mapOf("type" to "integer"),
-                                    "presetSlot" to mapOf("type" to "string"),
-                                    "query" to mapOf("type" to "string"),
-                                    "url" to mapOf("type" to "string"),
-                                    "bypassed" to mapOf("type" to "boolean"),
-                                    "slotName" to mapOf("type" to "string"),
-                                    "usbVolume" to mapOf("type" to "integer"),
-                                    "mainVolume" to mapOf("type" to "integer"),
-                                    "headphoneVolume" to mapOf("type" to "integer")
-                                )
-                            )
-                        )
-                    )
-                }
-            } else null
-            val body = buildMap<String, Any?> {
-                put("model", model)
-                put("messages", allMessages)
-                put("temperature", 0.3)
-                put("max_tokens", 4096)
-                if (toolsDef != null) put("tools", toolsDef)
-            }
-            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.encodeToString(kotlinx.serialization.SerializableSerializer(kotlinx.serialization.json.JsonElement), kotlinx.serialization.json.Json.parseToJsonElement(kotlinx.serialization.json.Json.encodeToString(body)).jsonPrimitive.content)
-            val url = "$apiBase"
-            val headers = mutableMapOf(
-                "Content-Type" to "application/json",
-                "Authorization" to "Bearer $apiKey"
-            )
+                    buildString {
+                        append("{\"type\":\"function\",\"function\":{\"name\":\"${t.name}\",")
+                        append("\"description\":\"${t.description}\",")
+                        append("\"parameters\":{\"type\":\"object\",\"properties\":{\"block\":{\"type\":\"integer\"},")
+                        append("\"modelId\":{\"type\":\"integer\"},\"value\":{\"type\":\"integer\"},")
+                        append("\"presetSlot\":{\"type\":\"string\"},\"query\":{\"type\":\"string\"},")
+                        append("\"url\":{\"type\":\"string\"},\"bypassed\":{\"type\":\"boolean\"},")
+                        append("\"slotName\":{\"type\":\"string\"},\"usbVolume\":{\"type\":\"integer\"},")
+                        append("\"mainVolume\":{\"type\":\"integer\"},\"headphoneVolume\":{\"type\":\"integer\"}}}}")
+                    }
+                }.joinToString(",")
+            } else "null"
+            val body = "{\"model\":\"$model\",\"messages\":[$allMessages],\"temperature\":0.3,\"max_tokens\":4096,\"tools\":$toolsDef}"
 
-            val request = okhttp3.Request.Builder()
-                .url(url)
-                .post(json.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .headers(okhttp3.Headers.of(headers))
+            val request = Request.Builder()
+                .url(apiBase)
+                .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .header("Authorization", "Bearer $apiKey")
+                .header("Content-Type", "application/json")
                 .build()
 
             val response = okHttpClient.newCall(request).execute()
@@ -286,7 +268,7 @@ class OpenAiCompatProvider(
                 return
             }
 
-            parseOpenAiResponse(responseBody, onEvent)
+            parseOpenAiResponse(responseBody!!, onEvent)
             onEvent(AiResponseEvent.Done)
         } catch (e: Exception) {
             onEvent(AiResponseEvent.Error(e.message ?: "Generation failed"))
@@ -294,52 +276,54 @@ class OpenAiCompatProvider(
     }
 
     private fun parseOpenAiResponse(body: String, onEvent: (AiResponseEvent) -> Unit) {
-        val start = body.indexOf('{')
-        val end = body.lastIndexOf('}')
-        val json = if (start >= 0 && end > start) body.substring(start, end + 1) else body
-        val choiceStart = json.indexOf("\"choices\"")
-        if (choiceStart >= 0) {
-            val choiceBlock = json.substring(choiceStart)
-            val toolCallsStart = choiceBlock.indexOf("\"tool_calls\"")
-            if (toolCallsStart >= 0) {
-                val toolCallsBlock = choiceBlock.substring(toolCallsStart)
-                extractOpenAiToolCalls(toolCallsBlock, onEvent)
-                return
-            }
-            val text = extractOpenAiText(choiceBlock)
-            if (text.isNotEmpty()) {
-                onEvent(AiResponseEvent.TextChunk(text))
-            }
+        val json = extractObject(body) ?: return
+        val choice = extractChoiceContent(json)
+        if (choice.isNotEmpty()) {
+            onEvent(AiResponseEvent.TextChunk(choice))
+            return
+        }
+        val functionName = extractFirstString(json, "\"name\"")
+        if (functionName != null) {
+            val args = extractArgsForObject(json, functionName)
+            onEvent(AiResponseEvent.ToolCall(functionName, args))
+            return
+        }
+        val text = extractFirstString(json, "\"content\"")
+        if (text != null && text.isNotEmpty()) {
+            onEvent(AiResponseEvent.TextChunk(text))
         }
     }
 
-    private fun extractOpenAiToolCalls(block: String, onEvent: (AiResponseEvent) -> Unit) {
-        var pos = 0
-        while (pos < block.length) {
-            val objStart = block.indexOf("{", pos)
-            if (objStart < 0) break
-            val objEnd = block.indexOf("}", objStart)
-            if (objEnd < 0) break
-            val obj = block.substring(objStart, objEnd + 1)
-            val nameStart = obj.indexOf("\"name\"")
-            if (nameStart >= 0) {
-                val name = extractSimpleString(obj, nameStart + "\"name\"".length) ?: break
-                val argsStart = obj.indexOf("{", nameStart)
-                val argsEnd = obj.lastIndexOf("}", obj)
-                if (argsStart > 0 && argsEnd > argsStart) {
-                    val argsJson = obj.substring(argsStart + 1, argsEnd)
-                    val args = parseFunctionArgs(argsJson)
-                    onEvent(AiResponseEvent.ToolCall(name, args))
-                }
-            }
-            pos = objEnd + 1
-        }
+    private fun extractChoiceContent(json: String): String {
+        val idx = json.indexOf("\"choices\"")
+        if (idx < 0) return ""
+        val block = json.substring(idx)
+        val content = block.substringAfter("\"content\":\"")
+        return content.takeWhile { it != '"' }.replace("\\n", "\n")
     }
 
-    private fun extractOpenAiText(block: String): String {
-        val textStart = block.indexOf("\"content\": \"")
-        if (textStart < 0) return ""
-        val after = block.substring(textStart + "\"content\": \"".length)
-        return after.takeWhile { it != '"' }.replace("\\n", "\n").replace("\\\"", "\"")
+    private fun extractArgsForObject(json: String, funcName: String): Map<String, Any> {
+        val argsStart = json.indexOf("\"arguments\":{")
+        if (argsStart < 0) return emptyMap()
+        val argsEnd = json.indexOf("}}", argsStart)
+        val argsJson = if (argsEnd < 0) json.substring(argsStart + 12) else json.substring(argsStart + 12, argsEnd)
+        return parseFunctionArgs(argsJson)
+    }
+
+    private fun extractFirstString(json: String, key: String): String? {
+        val start = json.indexOf("\"$key\"")
+        if (start < 0) return null
+        val q = json.indexOf('"', start + key.length + 1)
+        if (q < 0) return null
+        var end = q + 1
+        var escape = false
+        while (end < json.length) {
+            val c = json[end]
+            if (escape) { escape = false; end++ }
+            else if (c == '\\') escape = true
+            else if (c == '"') break
+            else end++
+        }
+        return if (end > q + 1) json.substring(q + 1, end) else null
     }
 }

@@ -132,19 +132,19 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         _isAgentBusy.value = true
         _connectionStatus.value = "Agent processing..."
 
-        val providerName = container.aiProviderRepository.getSelectedProvider()
-        val model = container.aiProviderRepository.getSelectedModel() ?: "gemini-2.0-flash"
+        val providerName = container.aiProviderRepository.getSelectedProvider().first()
+        val model = container.aiProviderRepository.getSelectedModel().first() ?: "gemini-2.0-flash"
         val apiKey = when (providerName) {
-            "openai" -> container.aiProviderRepository.getOpenAiApiKey() ?: ""
-            else -> container.aiProviderRepository.getGeminiApiKey() ?: ""
+            "openai" -> container.aiProviderRepository.getOpenAiApiKey().first() ?: ""
+            else -> container.aiProviderRepository.getGeminiApiKey().first() ?: ""
         }
-        val oauth = container.aiProviderRepository.getOauthToken()
+        val oauth = container.aiProviderRepository.getOauthToken().first()
 
         val provider: AiProvider? = when {
             providerName == "openai" && apiKey.isNotBlank() -> OpenAiCompatProvider(apiKey, "https://api.deepseek.com/v1", model)
             apiKey.isNotBlank() -> GeminiProvider(apiKey, oauth, model)
             else -> {
-                addSystemMessage("No AI provider configured. Open Settings to select Google Gemini or OpenAI-compatible endpoint.")
+                addSystemMessage("No AI provider configured. Open Settings to select Google Gemini or an OpenAI-compatible endpoint (DeepSeek 4.1 Flash).")
                 _isAgentBusy.value = false
                 return
             }
@@ -182,9 +182,16 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
 
     private suspend fun handleToolCall(toolName: String, args: Map<String, Any>) {
         val result = toolExecutor.execute(toolName, args)
-        val toolResult = AiResponseEvent.ToolResult(toolName, result)
         _isAgentBusy.value = false
-        addAgentMessage("Tool $toolName executed: $result")
+        addAgentMessage("Tool $toolName executed: ${result.message()}")
+    }
+
+    private fun AgentToolExecutor.Result.message(): String {
+        return when (this) {
+            is AgentToolExecutor.Result.Success -> "Success: $message"
+            is AgentToolExecutor.Result.Info -> "Info: $message"
+            is AgentToolExecutor.Result.Error -> "Error: $message"
+        }
     }
 
     fun undoTone() {
