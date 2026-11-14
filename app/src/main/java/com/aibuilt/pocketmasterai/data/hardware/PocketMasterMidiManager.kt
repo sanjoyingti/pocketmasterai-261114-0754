@@ -1,12 +1,27 @@
 package com.aibuilt.pocketmasterai.data.hardware
 
 import android.content.Context
+import android.hardware.usb.UsbManager
+import android.media.midi.MidiDevice
 import android.media.midi.MidiManager
-import android.util.Log
+import android.media.midi.MidiMessage
+import android.media.midi.MidiMessageReceiver
 import android.os.Handler
 import android.os.Looper
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import android.util.Log
+import com.aibuilt.pocketmasterai.data.local.PocketMasterDeviceState
+import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.Channel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 
 class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice {
 
