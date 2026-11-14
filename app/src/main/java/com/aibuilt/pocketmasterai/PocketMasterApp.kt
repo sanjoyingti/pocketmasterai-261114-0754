@@ -8,19 +8,14 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController
-import androidx.navigation.NavStackEntry
-import androidx.navigation.compose.NavHost
+import androidx.navigation.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.ui.chain.ChainScreen
 import com.aibuilt.pocketmasterai.ui.presets.PresetsScreen
 import com.aibuilt.pocketmasterai.ui.settings.SettingsScreen
@@ -30,7 +25,6 @@ import com.google.android.material.icons.filled.Casino
 import com.google.android.material.icons.filled.Chat
 import com.google.android.material.icons.filled.Dock
 import com.google.android.material.icons.filled.Settings
-import androidx.compose.material.icons.Icons
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Chain : Screen("chain", "Pedal Chain", Icons.Default.Dock)
@@ -44,7 +38,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
 }
 
 @Composable
-fun PocketMasterApp(container: AppContainer) {
+fun PocketMasterApp(container: AppContainer, viewModel: PocketMasterViewModel) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -52,29 +46,29 @@ fun PocketMasterApp(container: AppContainer) {
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
+            color = androidx.compose.material3.MaterialTheme.colorScheme.background
         ) {
             NavHost(
                 navController = navController,
                 startDestination = Screen.Chain.route
             ) {
                 composable(Screen.Chain.route) {
-                    ChainScreen(container = container)
+                    ChainScreen(container = container, viewModel = viewModel)
                 }
                 composable(Screen.Presets.route) {
-                    PresetsScreen(container = container)
+                    PresetsScreen(container = container, viewModel = viewModel)
                 }
                 composable(Screen.Agent.route) {
-                    AgentScreen(container = container)
+                    AgentScreen(container = container, viewModel = viewModel)
                 }
                 composable(Screen.Settings.route) {
-                    SettingsScreen(container = container)
+                    SettingsScreen(container = container, viewModel = viewModel)
                 }
             }
         }
 
         NavigationBar(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant,
             tonalElevation = NavigationBarItemDefaults.tonalElevation
         ) {
             Screen.entries.forEach { screen ->
@@ -87,11 +81,11 @@ fun PocketMasterApp(container: AppContainer) {
                         popUpTo(Screen.Chain.route) { inclusive = false }
                     } },
                     colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        selectedIconColor = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                        selectedTextColor = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                        indicatorColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer,
+                        unselectedIconColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        unselectedTextColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
             }

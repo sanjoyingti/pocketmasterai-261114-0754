@@ -8,7 +8,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.remember
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.rememberNavController
 import com.aibuilt.pocketmasterai.ui.theme.PocketMasterTheme
@@ -28,6 +27,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val container = remember { AppContainer(applicationContext) }
+        UsbDeviceBroadcastReceiver.register(this, container)
         val viewModel = ViewModelProvider(
             this,
             PocketMasterViewModel.Factory(container)
@@ -37,5 +37,10 @@ class MainActivity : ComponentActivity() {
                 PocketMasterApp(container = container, viewModel = viewModel)
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        UsbDeviceBroadcastReceiver.handleIntent(this, AppContainer(applicationContext), intent)
     }
 }

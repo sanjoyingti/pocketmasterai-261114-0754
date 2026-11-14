@@ -3,6 +3,8 @@ package com.aibuilt.pocketmasterai
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.aibuilt.pocketmasterai.data.hardware.PocketMasterDevice
+import com.aibuilt.pocketmasterai.data.hardware.PocketMasterDeviceState
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +15,7 @@ import kotlinx.coroutines.launch
 
 class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
 
-    private val device = container.deviceState
+    private val device: PocketMasterDevice = container.deviceState
 
     private val _connectionStatus = MutableStateFlow("Disconnected")
     val connectionStatus: StateFlow<String> = _connectionStatus.asStateFlow()
@@ -29,9 +31,6 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
 
     private val _name = MutableStateFlow(device.name.value)
     val name: StateFlow<String> = _name.asStateFlow()
-
-    private val _chatText = MutableStateFlow("")
-    val chatText: StateFlow<String> = _chatText.asStateFlow()
 
     init {
         observeDevice()
@@ -102,10 +101,6 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun setChatText(text: String) {
-        _chatText.value = text
-    }
-
     fun sendMessage(text: String) {
         viewModelScope.launch {
             _connectionStatus.value = "Agent processing: $text"
@@ -133,6 +128,3 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 }
-
-fun PocketMasterViewModelFactory(container: AppContainer): ViewModelProvider.Factory =
-    PocketMasterViewModel.Factory(container)

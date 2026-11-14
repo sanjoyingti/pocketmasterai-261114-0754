@@ -12,6 +12,7 @@ import com.aibuilt.pocketmasterai.data.local.PocketMasterDatabase
 import com.aibuilt.pocketmasterai.data.local.dao.ChatDao
 import com.aibuilt.pocketmasterai.data.local.dao.ToneSnapshotDao
 import com.aibuilt.pocketmasterai.data.preference.ChatHistoryRepository
+import com.aibuilt.pocketmasterai.data.preference.DeviceMapRepository
 import com.aibuilt.pocketmasterai.data.preference.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
