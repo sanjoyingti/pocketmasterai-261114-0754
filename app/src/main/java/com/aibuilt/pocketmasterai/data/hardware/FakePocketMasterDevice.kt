@@ -1,5 +1,6 @@
 package com.aibuilt.pocketmasterai.data.hardware
 
+import com.aibuilt.pocketmasterai.data.PocketMasterDevice
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -7,25 +8,25 @@ import kotlinx.coroutines.flow.asStateFlow
 class FakePocketMasterDevice : PocketMasterDevice {
 
     override val isConnected: StateFlow<Boolean> = MutableStateFlow(false)
+    override val deviceState: StateFlow<PocketMasterDeviceState> = _deviceState.asStateFlow()
 
-    private val _chain = MutableStateFlow(IntArray(NUM_BLOCKS) { it })
-    override val chain: StateFlow<IntArray> = _chain.asStateFlow()
-
-    private val _bypass = MutableStateFlow(ByteArray(NUM_BLOCKS) { 0 })
-    override val bypass: StateFlow<ByteArray> = _bypass.asStateFlow()
-
-    private val _models = MutableStateFlow(ShortArray(NUM_BLOCKS) { 0 })
-    override val models: StateFlow<ShortArray> = _models.asStateFlow()
-
-    private val _name = MutableStateFlow("USER001")
-    override val name: StateFlow<String> = _name.asStateFlow()
-
-    private val _globalLevels = MutableStateFlow(intArrayOf(0, 0, 0))
-    override val globalLevels: StateFlow<IntArray> = _globalLevels.asStateFlow()
+    private val _deviceState = MutableStateFlow(PocketMasterDeviceState())
+    override val chain: StateFlow<IntArray> = _deviceState.map { it.chain }.asStateFlow()
+    override val bypass: StateFlow<ByteArray> = _deviceState.map { it.bypass }.asStateFlow()
+    override val models: StateFlow<ShortArray> = _deviceState.map { it.models }.asStateFlow()
+    override val name: StateFlow<String> = _deviceState.map { it.name }.asStateFlow()
+    override val globalLevels: StateFlow<IntArray> = _deviceState.map { it.globalLevels }.asStateFlow()
 
     private var dumpResponded = true
 
     override suspend fun connect(): Boolean {
+        _deviceState.value = PocketMasterDeviceState(
+            chain = IntArray(9) { it },
+            bypass = ByteArray(9) { 0 },
+            models = ShortArray(9) { 0 },
+            name = "USER001",
+            globalLevels = intArrayOf(0, 0, 0)
+        )
         _isConnected.value = true
         dumpResponded = true
         return true
@@ -48,7 +49,7 @@ class FakePocketMasterDevice : PocketMasterDevice {
     override suspend fun receiveBytes(buffer: ByteArray): Int {
         if (!_isConnected.value || !dumpResponded) return 0
         dumpResponded = false
-        val nameBytes = _name.value.toByteArray()
+        val nameBytes = _deviceState.value.name.toByteArray()
         val out = ByteArray(14 + 6)
         for (i in 0 until 7) {
             out[i] = (((i * 17) + i) ushr 4).toByte()

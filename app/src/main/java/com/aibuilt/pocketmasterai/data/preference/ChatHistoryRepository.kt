@@ -1,6 +1,7 @@
 package com.aibuilt.pocketmasterai.data.preference
 
 import android.content.Context
+import androidx.room.Room
 import com.aibuilt.pocketmasterai.data.local.ChatMessage
 import com.aibuilt.pocketmasterai.data.local.ChatSession
 import com.aibuilt.pocketmasterai.data.local.PocketMasterDatabase
@@ -8,7 +9,6 @@ import com.aibuilt.pocketmasterai.data.local.ToneSnapshot
 import com.aibuilt.pocketmasterai.data.local.dao.ChatDao
 import com.aibuilt.pocketmasterai.data.local.dao.ToneSnapshotDao
 import kotlinx.coroutines.flow.Flow
-import androidx.room.Room
 
 class ChatHistoryRepository(context: Context) {
     private val database by lazy {
@@ -26,29 +26,29 @@ class ChatHistoryRepository(context: Context) {
         get() = database.toneSnapshotDao()
 
     suspend fun createSession(title: String): Long {
-        return database.insertSession(ChatSession(title = title))
+        return chatDao.insertSession(ChatSession(title = title))
     }
 
     suspend fun addMessage(sessionId: Long, role: String, content: String): Long {
-        return database.insertMessage(ChatMessage(session_id = sessionId, role = role, content = content))
+        return chatDao.insertMessage(ChatMessage(session_id = sessionId, role = role, content = content))
     }
 
     fun getMessagesBySession(sessionId: Long): Flow<List<ChatMessage>> =
-        database.getMessagesBySession(sessionId)
+        chatDao.getMessagesBySession(sessionId)
 
-    fun getAllSessions(): Flow<List<ChatSession>> = database.getAllSessions()
+    fun getAllSessions(): Flow<List<ChatSession>> = chatDao.getAllSessions()
 
     suspend fun deleteSession(sessionId: Long) {
-        database.deleteSession(sessionId)
+        chatDao.deleteSession(sessionId)
     }
 
     suspend fun saveSnapshot(snapshotData: String) {
-        database.insertSnapshot(ToneSnapshot(snapshotData = snapshotData))
+        toneSnapshotDao.insertSnapshot(ToneSnapshot(snapshotData = snapshotData))
     }
 
-    fun getLatestSnapshot(): Flow<ToneSnapshot?> = database.getLatestSnapshot()
+    fun getLatestSnapshot(): Flow<ToneSnapshot?> = toneSnapshotDao.getLatestSnapshot()
 
     suspend fun clearSnapshots() {
-        database.clearSnapshots()
+        toneSnapshotDao.clearSnapshots()
     }
 }
