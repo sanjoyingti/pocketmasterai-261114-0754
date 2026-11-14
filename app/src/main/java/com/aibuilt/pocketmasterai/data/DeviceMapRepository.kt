@@ -45,8 +45,8 @@ class DeviceMapRepository {
 
     fun validateModel(effectType: String, modelId: Int): Boolean {
         val list = when (effectType.lowercase()) {
-            "amp" -> _map?.amps?.get(effectType)
-            "cab" -> _map?.cabs?.get(effectType)
+            "amp" -> _map?.amps?.get("amp")
+            "cab" -> _map?.cabs?.get("cab")
             else -> _map?.effects?.get(effectType)
         }
         return list?.any { it.id == modelId } == true
@@ -54,30 +54,28 @@ class DeviceMapRepository {
 
     fun validateParameter(effectType: String, paramName: String, value: Int): Boolean {
         val list = when (effectType.lowercase()) {
-            "amp" -> _map?.amps?.get(effectType)
-            "cab" -> _map?.cabs?.get(effectType)
+            "amp" -> _map?.amps?.get("amp")
+            "cab" -> _map?.cabs?.get("cab")
             else -> _map?.effects?.get(effectType)
         }
-        val effect = list?.find { /* match by name/id */ null }
-        return effect?.params?.get(paramName)?.let { value in (it.min..it.max) } ?: true
+        return list?.any { it.params.containsKey(paramName) } ?: true
     }
 
     fun clampValue(effectType: String, paramName: String, value: Int): Int {
         val list = when (effectType.lowercase()) {
-            "amp" -> _map?.amps?.get(effectType)
-            "cab" -> _map?.cabs?.get(effectType)
+            "amp" -> _map?.amps?.get("amp")
+            "cab" -> _map?.cabs?.get("cab")
             else -> _map?.effects?.get(effectType)
         }
-        val effect = list?.find { /* match */ null }
-        return effect?.params?.get(paramName)?.let {
+        return list?.firstOrNull()?.params?.get(paramName)?.let {
             value.coerceIn(it.min, it.max)
         } ?: value
     }
 
     fun listModels(effectType: String): List<EffectEntry> {
         return when (effectType.lowercase()) {
-            "amp" -> _map?.amps?.get(effectType) ?: emptyList()
-            "cab" -> _map?.cabs?.get(effectType) ?: emptyList()
+            "amp" -> _map?.amps?.get("amp") ?: emptyList()
+            "cab" -> _map?.cabs?.get("cab") ?: emptyList()
             else -> _map?.effects?.get(effectType) ?: emptyList()
         }
     }

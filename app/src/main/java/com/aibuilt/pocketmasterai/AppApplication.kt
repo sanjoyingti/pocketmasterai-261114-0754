@@ -10,7 +10,8 @@ class AppApplication : Application() {
     }
 
     companion object {
-        lateinit var instance: AppApplication
+        @Volatile
+        var instance: AppApplication? = null
             private set
     }
 }

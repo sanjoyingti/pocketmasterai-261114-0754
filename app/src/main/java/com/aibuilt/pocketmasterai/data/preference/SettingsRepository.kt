@@ -4,10 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 
 class SettingsRepository(
     private val context: Context,
@@ -21,12 +18,6 @@ class SettingsRepository(
         private val KEY_AI_PROVIDER = stringPreferencesKey("ai_provider")
         private val KEY_OAUTH_TOKEN = stringPreferencesKey("oauth_token")
         private val KEY_SEARCH_SOURCE = stringPreferencesKey("search_source")
-    }
-
-    private val masterKey: MasterKey by lazy {
-        MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
     }
 
     fun getGeminiApiKey(): Flow<String?> = dataStore.data.map { it[KEY_GEMINI_API_KEY] }

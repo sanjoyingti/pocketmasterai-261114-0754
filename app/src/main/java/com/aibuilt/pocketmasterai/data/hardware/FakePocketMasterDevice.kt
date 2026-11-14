@@ -3,6 +3,7 @@ package com.aibuilt.pocketmasterai.data.hardware
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 
 /**
@@ -26,10 +27,10 @@ class FakePocketMasterDevice(
 
     override val chain: StateFlow<IntArray> = _chain.asStateFlow()
     override val bypass: StateFlow<ByteArray> = _bypass.asStateFlow()
-    override val models: StateFlow<shortArray> = _models.asStateFlow()
+    override val models: StateFlow<ShortArray> = _models.asStateFlow()
     override val params: StateFlow<HashMap<Int, HashMap<Int, Short>>> = _params.asStateFlow()
     override val name: StateFlow<String> = _name.asStateFlow()
-    override val globalLevels: StateFlow<intArrayOf> = _globalLevels.asStateFlow()
+    override val globalLevels: StateFlow<IntArray> = _globalLevels.asStateFlow()
 
     private val _lastReceivedCommands = MutableStateFlow<List<ByteArray>>(emptyList())
     override val lastReceivedCommands: StateFlow<List<ByteArray>> = _lastReceivedCommands.asStateFlow()

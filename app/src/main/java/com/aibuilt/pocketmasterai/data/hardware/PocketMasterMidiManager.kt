@@ -2,11 +2,9 @@ package com.aibuilt.pocketmasterai.data.hardware
 
 import android.content.Context
 import android.media.midi.MidiManager
-import android.os.Bundle
+import android.util.Log
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
-import android.hardware.usb.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -22,39 +20,33 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
     private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
 
     private val _isConnected = MutableStateFlow(false)
-    private val _deviceState = MutableStateFlow<PocketMasterDeviceState>(PocketMasterDeviceState())
     private val _connectionStatus = MutableStateFlow("Disconnected")
     private val commandQueue = Channel<ByteArray>(Channel.BUFFERED)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var midiDevice: MidiDevice? = null
     private var sender: MidiDevice.Sender? = null
     private var receiverThread: Thread? = null
-    private var receiveBuffer = ByteArrayOutputStream()
+    private val receiveBuffer = ByteArrayOutputStream()
 
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
     override val chain: StateFlow<IntArray> = _deviceState.map { it.chain }.asStateFlow()
     override val bypass: StateFlow<ByteArray> = _deviceState.map { it.bypass }.asStateFlow()
-    override val models: StateFlow<shortArray> = _deviceState.map { it.models }.asStateFlow()
+    override val models: StateFlow<ShortArray> = _deviceState.map { it.models }.asStateFlow()
     override val params: StateFlow<HashMap<Int, HashMap<Int, Short>>> = _deviceState.map { it.params }.asStateFlow()
     override val name: StateFlow<String> = _deviceState.map { it.name }.asStateFlow()
-    override val globalLevels: StateFlow<intArrayOf> = _deviceState.map { it.globalLevels }.asStateFlow()
+    override val globalLevels: StateFlow<IntArray> = _deviceState.map { it.globalLevels }.asStateFlow()
     override val lastReceivedCommands: StateFlow<List<ByteArray>> = MutableStateFlow(emptyList()).asStateFlow()
 
-    data class PocketMasterDeviceState(
-        val chain: IntArray = IntArray(9) { i -> i },
-        val bypass: ByteArray = ByteArray(9) { 0 },
-        val models: ShortArray = ShortArray(9) { 0 },
-        val params: HashMap<Int, HashMap<Int, Short>> = HashMap(),
-        val name: String = "USER001",
-        val globalLevels: intArrayOf = intArrayOf(0, 0, 0)
-    )
+    private var autoReconnectJob: Job? = null
+
+    override val deviceState: StateFlow<PocketMasterDeviceState> = _deviceState.asStateFlow()
+
+    private val _deviceState = MutableStateFlow(PocketMasterDeviceState())
 
     fun onMidiDeviceConnected(device: MidiDevice) {
         scope.launch {
             try {
-                if (sender != null) {
-                    sender?.close()
-                }
+                sender?.close()
                 midiDevice = device
                 sender = device.openSender(device.deviceId)
                 _isConnected.value = true
@@ -78,9 +70,8 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
         autoReconnect()
     }
 
-    private val autoReconnectJob = MutableStateFlow<Job?>(null)
     private fun autoReconnect() {
-        autoReconnectJob.value = scope.launch {
+        autoReconnectJob = scope.launch {
             var attempts = 0
             while (attempts < 10) {
                 delay(RETRY_DELAY_MS)
@@ -128,7 +119,7 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
     }
 
     private var pendingSysex = false
-    private var sysexPayload = ByteArrayOutputStream()
+    private val sysexPayload = ByteArrayOutputStream()
 
     private fun processReceivedData() {
         while (receiveBuffer.available() > 0) {
@@ -180,7 +171,7 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
             for (i in 0 until 9) {
                 newBypass[i] = data[18 + i].toByte()
             }
-            val newState = PocketMasterDeviceState(
+            _deviceState.value = PocketMasterDeviceState(
                 chain = IntArray(9) { i -> i },
                 bypass = newBypass,
                 models = newModels,
@@ -188,7 +179,6 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
                 name = dump.name,
                 globalLevels = intArrayOf(0, 0, 0)
             )
-            _deviceState.value = newState
         }
     }
 
@@ -262,16 +252,14 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
 
     override suspend fun disconnect() {
         stopReceiveThread()
-        scope.launch {
-            sender?.close()
-            sender = null
-            midiDevice?.close()
-            midiDevice = null
-            _isConnected.value = false
-            _connectionStatus.value = "Disconnected"
-            autoReconnectJob?.value?.cancel()
-            autoReconnectJob.value = null
-        }
+        sender?.close()
+        sender = null
+        midiDevice?.close()
+        midiDevice = null
+        _isConnected.value = false
+        _connectionStatus.value = "Disconnected"
+        autoReconnectJob?.cancel()
+        autoReconnectJob = null
     }
 
     override suspend fun sendBytes(data: ByteArray): Int {
