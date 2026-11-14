@@ -5,9 +5,11 @@ import android.content.res.AssetManager
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.room.Room
+import com.aibuilt.pocketmasterai.data.agent.AiProviderRepository
+import com.aibuilt.pocketmasterai.data.agent.WebSearchRepository
+import com.aibuilt.pocketmasterai.data.hardware.FakePocketMasterDevice
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterDevice
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterMidiManager
-import com.aibuilt.pocketmasterai.data.hardware.FakePocketMasterDevice
 import com.aibuilt.pocketmasterai.data.local.PocketMasterDatabase
 import com.aibuilt.pocketmasterai.data.local.dao.ChatDao
 import com.aibuilt.pocketmasterai.data.local.dao.ToneSnapshotDao
@@ -26,6 +28,8 @@ class AppContainer(appContext: Context) {
     val settingsRepository = SettingsRepository(context, context.dataStore)
     val chatHistoryRepository = ChatHistoryRepository(context)
     val deviceMapRepository = DeviceMapRepository()
+    val webSearchRepository = WebSearchRepository(context, context.dataStore)
+    val aiProviderRepository = AiProviderRepository(context)
 
     private val database by lazy {
         Room.databaseBuilder(

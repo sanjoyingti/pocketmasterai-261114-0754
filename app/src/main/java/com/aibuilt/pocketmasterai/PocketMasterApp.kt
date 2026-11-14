@@ -2,11 +2,6 @@ package com.aibuilt.pocketmasterai
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Casino
-import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Dock
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -25,12 +20,14 @@ import com.aibuilt.pocketmasterai.ui.chain.ChainScreen
 import com.aibuilt.pocketmasterai.ui.presets.PresetsScreen
 import com.aibuilt.pocketmasterai.ui.settings.SettingsScreen
 import com.aibuilt.pocketmasterai.ui.agent.AgentScreen
+import com.aibuilt.pocketmasterai.data.AppContainer
+import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    object Chain : Screen("chain", "Pedal Chain", Icons.Default.Dock)
-    object Presets : Screen("presets", "Presets", Icons.Default.Casino)
-    object Agent : Screen("agent", "AI Agent", Icons.Default.Chat)
-    object Settings : Screen("settings", "Settings", Icons.Default.Settings)
+    object Chain : Screen("chain", "Pedal Chain", androidx.compose.material.icons.Icons.Default.Dock)
+    object Presets : Screen("presets", "Presets", androidx.compose.material.icons.Icons.Default.Casino)
+    object Agent : Screen("agent", "AI Agent", androidx.compose.material.icons.Icons.Default.Chat)
+    object Settings : Screen("settings", "Settings", androidx.compose.material.icons.Icons.Default.Settings)
 
     companion object {
         fun fromRoute(route: String): Screen? = entries.find { it.route == route }

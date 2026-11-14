@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aibuilt.pocketmasterai.data.agent.AiMessage
 import com.aibuilt.pocketmasterai.data.agent.AiProvider
-import com.aibuilt.pocketmasterai.data.agent.AiProviderRepository
 import com.aibuilt.pocketmasterai.data.agent.AiResponseEvent
 import com.aibuilt.pocketmasterai.data.agent.AgentToolDefinitions
 import com.aibuilt.pocketmasterai.data.agent.AgentToolExecutor
@@ -13,7 +12,7 @@ import com.aibuilt.pocketmasterai.data.agent.GeminiProvider
 import com.aibuilt.pocketmasterai.data.agent.OpenAiCompatProvider
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterDevice
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
-import com.aibuilt.pocketmasterai.data.model.ToneSnapshot
+import com.aibuilt.pocketmasterai.model.ToneSnapshot
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

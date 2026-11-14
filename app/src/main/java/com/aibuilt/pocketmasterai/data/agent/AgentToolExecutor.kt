@@ -1,131 +1,136 @@
 package com.aibuilt.pocketmasterai.data.agent
 
 import com.aibuilt.pocketmasterai.data.PocketMasterDevice
+import com.aibuilt.pocketmasterai.data.PocketMasterDevice.Companion.BLOCK_AMP
+import com.aibuilt.pocketmasterai.data.PocketMasterDevice.Companion.BLOCK_DLY
+import com.aibuilt.pocketmasterai.data.PocketMasterDevice.Companion.BLOCK_EQ
+import com.aibuilt.pocketmasterai.data.PocketMasterDevice.Companion.BLOCK_FX1
+import com.aibuilt.pocketmasterai.data.PocketMasterDevice.Companion.BLOCK_FX2
+import com.aibuilt.pocketmasterai.data.PocketMasterDevice.Companion.BLOCK_IR
+import com.aibuilt.pocketmasterai.data.PocketMasterDevice.Companion.BLOCK_NR
+import com.aibuilt.pocketmasterai.data.PocketMasterDevice.Companion.BLOCK_RVB
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
 import com.aibuilt.pocketmasterai.model.ToneSnapshot
+import com.aibuilt.pocketmasterai.data.AppContainer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class AgentToolExecutor(
     private val device: PocketMasterDevice,
     private val container: AppContainer
 ) {
 
+    suspend fun execute(toolName: String, args: Map<String, Any>): Result {
+        return withContext(Dispatchers.IO) {
+            when (toolName) {
+                "get_device_state" -> Result.Success(getDeviceStateMessage())
+                "list_presets" -> Result.Success("Lists user slots P01–P50 and factory slots F01–F50. Save/load via the Presets tab.")
+                "select_preset" -> {
+                    val slot = args["presetSlot"] as? String ?: args["slotName"] as? String ?: "P01"
+                    Result.Success("Selecting $slot into edit buffer (save required to persist).")
+                }
+                "set_block_state" -> {
+                    val block = numArg(args, "block")
+                    val bypassed = boolArg(args, "bypassed")
+                    device.sendBytes(PocketMasterProtocol.setBlockState(block, bypassed))
+                    Result.Success("Block ${PocketMasterProtocol.getBlockLabel(block)} bypass=${!bypassed}")
+                }
+                "set_block_model" -> {
+                    val block = numArg(args, "block")
+                    val modelId = numArg(args, "modelId")
+                    device.sendBytes(PocketMasterProtocol.setBlockModel(block, modelId))
+                    Result.Success("Block ${PocketMasterProtocol.getBlockLabel(block)} model=$modelId")
+                }
+                "set_parameter" -> {
+                    val block = numArg(args, "block")
+                    val paramId = numArg(args, "paramId")
+                    val value = numArg(args, "value")
+                    device.sendBytes(PocketMasterProtocol.setParameter(block, paramId, value.toShort()))
+                    Result.Success("Block $block param=$paramId value=$value")
+                }
+                "set_chain_reorder" -> {
+                    val order = argArrayInt(args, "order")
+                    if (order.size != PocketMasterProtocol.NUM_BLOCKS) {
+                        return@withContext Result.Error("Order must contain exactly ${PocketMasterProtocol.NUM_BLOCKS} block numbers.")
+                    }
+                    device.sendBytes(PocketMasterProtocol.chainReorder(order))
+                    Result.Success("Chain reordered: ${order.joinToString(" -> ")}")
+                }
+                "set_global_levels" -> {
+                    val usb = numArg(args, "usbVolume", 0)
+                    val main = numArg(args, "mainVolume", 0)
+                    val hp = numArg(args, "headphoneVolume", 0)
+                    device.sendBytes(PocketMasterProtocol.setGlobalLevels(usb, main, hp))
+                    Result.Success("Levels: USB=$usb, Main=$main, Headphone=$hp")
+                }
+                "save_preset" -> {
+                    val slot = numArg(args, "slot", 1).coerceIn(1, 50)
+                    val nameArg = args["slotName"] as? String
+                    val slotByte = (slot - 1).toByte()
+                    device.sendBytes(PocketMasterProtocol.saveEditBuffer(slotByte))
+                    Result.Success("Saved ${nameArg ?: "current preset"} to P${slot.toString().padStart(2, '0')}")
+                }
+                "web_search" -> {
+                    val query = args["query"] as? String ?: args["model"] as? String
+                    if (query.isNullOrBlank()) return@withContext Result.Error("web_search requires 'query'.")
+                    container.webSearchRepository.search(query)
+                    Result.Success("Searched web for: $query")
+                }
+                "fetch_page" -> {
+                    val url = args["url"] as? String ?: args["model"] as? String
+                    if (url.isNullOrBlank()) return@withContext Result.Error("fetch_page requires 'url'.")
+                    container.webSearchRepository.fetchPage(url)
+                    Result.Success("Fetched: $url")
+                }
+                "tone_snapshot" -> {
+                    val snap = ToneSnapshot(
+                        chain = device.chain.value.copyOf(),
+                        bypass = device.bypass.value.copyOf(),
+                        models = device.models.value.copyOf(),
+                        parameters = device.deviceState.value.parameters,
+                        name = device.name.value
+                    )
+                    container.chatHistoryRepository.saveSnapshot(snap.toString())
+                    Result.Success("Snapshot saved (undo available in AI Agent tab)")
+                }
+                else -> Result.Error("Unknown tool: $toolName. Available: get_device_state, list_presets, select_preset, set_block_state, set_block_model, set_parameter, set_chain_reorder, set_global_levels, save_preset, web_search, fetch_page, tone_snapshot")
+            }
+        }
+    }
+
+    private fun getDeviceStateMessage(): String {
+        val name = device.name.value
+        val chain = device.chain.value.joinToString(" -> ") { PocketMasterProtocol.getBlockLabel(it) }
+        val blockInfo = device.chain.value.mapIndexed { i, block ->
+            val label = PocketMasterProtocol.getBlockLabel(block)
+            val model = device.models.value[block].toInt()
+            val bypassed = device.bypass.value[block].toInt() == 1
+            "$label (model $model, bypass=${!bypassed})"
+        }.joinToString(", ")
+        val levels = device.globalLevels.value
+        return """
+            Name: $name
+            Chain: $chain
+            Blocks: $blockInfo
+            Global levels: USB=${levels[0]}, Main=${levels[1]}, Headphone=${levels[2]}
+            """.trimIndent()
+    }
+
+    private fun numArg(args: Map<String, Any>, key: String, default: Int = 0): Int {
+        return (args[key] as? Number)?.toInt() ?: default
+    }
+
+    private fun boolArg(args: Map<String, Any>, key: String): Boolean {
+        return args[key] as? Boolean ?: false
+    }
+
+    private fun argArrayInt(args: Map<String, Any>, key: String): IntArray {
+        return (args[key] as? List<*>)?.mapNotNull { it as? Number }?.mapToInt { it.toInt() }?.toIntArray() ?: IntArray(0)
+    }
+
     sealed class Result {
         data class Success(val message: String) : Result()
         data class Info(val message: String) : Result()
         data class Error(val message: String) : Result()
-
-        open fun message(): String = this.toString()
-    }
-
-    suspend fun execute(toolName: String, args: Map<String, Any>): Result {
-        return when (toolName) {
-            "get_device_state" -> {
-                Result.Info("Device state retrieved: chain, bypass, models, name, levels are live.")
-            }
-            "list_presets" -> {
-                Result.Info("User presets P01-P50 available; factory presets F01-F50 available.")
-            }
-            "select_preset" -> {
-                Result.Info("Loaded preset into working tone.")
-            }
-            "set_block_state" -> {
-                val block = args["block"] as? Int ?: -1
-                val bypassed = args["bypassed"] as? Boolean ?: false
-                if (block in 0..8) {
-                    device.sendBytes(PocketMasterProtocol.setBlockState(block, if (bypassed) 1 else 0))
-                    Result.Success("Block ${PocketMasterProtocol.getBlockLabel(block)} ${if (bypassed) "bypassed" else "enabled"}")
-                } else {
-                    Result.Error("Invalid block: $block")
-                }
-            }
-            "set_block_model" -> {
-                val block = args["block"] as? Int ?: -1
-                val modelId = (args["modelId"] as? Number)?.toInt() ?: 0
-                if (block in 0..8) {
-                    device.sendBytes(PocketMasterProtocol.setBlockModel(block, modelId))
-                    Result.Success("Block ${PocketMasterProtocol.getBlockLabel(block)} set to model $modelId")
-                } else {
-                    Result.Error("Invalid block: $block")
-                }
-            }
-            "set_parameter" -> {
-                val block = args["block"] as? Int ?: -1
-                val paramId = (args["paramId"] as? Number)?.toInt() ?: 0
-                val value = (args["value"] as? Number)?.toInt() ?: 0
-                if (block in 0..8 && paramId in 0..255 && value in 0..127) {
-                    device.sendBytes(PocketMasterProtocol.setParameter(block, paramId, value.toShort()))
-                    Result.Success("Block ${PocketMasterProtocol.getBlockLabel(block)} param $paramId = $value")
-                } else {
-                    Result.Error("Invalid param: block $block, paramId $paramId, value $value")
-                }
-            }
-            "set_chain_reorder" -> {
-                val order = (args["order"] as? List<*>)?.mapNotNull { it as? Int }?.toIntArray() ?: IntArray(9) { it }
-                if (order.size == 9) {
-                    device.sendBytes(PocketMasterProtocol.chainReorder(order))
-                    Result.Success("Chain reordered to ${order.joinToString(" -> ")}")
-                } else {
-                    Result.Error("Chain reorder requires exactly 9 block positions")
-                }
-            }
-            "set_global_levels" -> {
-                val usb = (args["usbVolume"] as? Number)?.toInt() ?: 0
-                val main = (args["mainVolume"] as? Number)?.toInt() ?: 0
-                val headphone = (args["headphoneVolume"] as? Number)?.toInt() ?: 0
-                device.sendBytes(PocketMasterProtocol.setGlobalLevels(usb, main, headphone))
-                Result.Success("Global levels set: USB=$usb, Main=$main, Headphone=$headphone")
-            }
-            "save_preset" -> {
-                val slot = (args["slotName"] as? String) ?: "P01"
-                val slotNum = slot.removePrefix("P").removePrefix("F").toIntOrNull() ?: 1
-                val name = (args["name"] as? String)?.take(10) ?: ""
-                if (slotNum in 1..50) {
-                    device.sendBytes(PocketMasterProtocol.saveEditBuffer(slotNum.toByte()))
-                    Result.Success("Saved $slot as $name")
-                } else {
-                    Result.Error("Invalid preset slot: $slot (use P01-P50)")
-                }
-            }
-            "web_search" -> {
-                val query = args["query"] as? String ?: ""
-                val results = try {
-                    container.webSearchRepository.search(query)
-                } catch (e: Exception) {
-                    emptyList()
-                }
-                if (results.isEmpty()) {
-                    Result.Info("Web search found no results for \"$query\"")
-                } else {
-                    val summary = results.joinToString("\n - ") { "${it.title} (${it.url})" }
-                    Result.Success("Search \"$query\":\n$summary")
-                }
-            }
-            "fetch_page" -> {
-                val url = args["url"] as? String ?: ""
-                val text = try {
-                    container.webSearchRepository.fetchPage(url)
-                } catch (e: Exception) {
-                    ""
-                }
-                val preview = text.trim().take(300).replace(Regex("\\s+"), " ")
-                Result.Success("Fetched $url. Preview: $preview")
-            }
-            "tone_snapshot" -> {
-                try {
-                    val snapshot = ToneSnapshot.fromDeviceState(
-                        chain = device.chain.value,
-                        bypass = device.bypass.value,
-                        models = device.models.value,
-                        name = device.name.value,
-                        parameters = device.deviceState.value.parameters
-                    )
-                    container.chatHistoryRepository.saveSnapshot(snapshot.toString())
-                    Result.Success("Snapshot captured: ${snapshot.name}")
-                } catch (e: Exception) {
-                    Result.Error("Failed to capture snapshot: ${e.message}")
-                }
-            }
-            else -> Result.Error("Unknown tool: $toolName")
-        }
     }
 }
