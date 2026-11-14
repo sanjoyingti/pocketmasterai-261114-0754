@@ -1,6 +1,6 @@
 package com.aibuilt.pocketmasterai.data.model
 
-import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
+import com.aibuilt.pocketmasterai.data.PocketMasterDevice
 
 data class ToneSnapshot(
     val chain: IntArray,
@@ -19,7 +19,7 @@ data class ToneSnapshot(
             parameters: Map<Int, Map<Int, Short>>
         ): ToneSnapshot = ToneSnapshot(chain, bypass, models, parameters, name)
 
-        fun emptyFor(blockCount: Int = PocketMasterProtocol.NUM_BLOCKS): ToneSnapshot {
+        fun emptyFor(blockCount: Int = PocketMasterDevice.NUM_BLOCKS): ToneSnapshot {
             return ToneSnapshot(
                 chain = IntArray(blockCount) { it },
                 bypass = ByteArray(blockCount) { 0 },
@@ -28,6 +28,19 @@ data class ToneSnapshot(
                 name = "UNNAMED"
             )
         }
+    }
+
+    fun toJson(): String {
+        val json = StringBuilder()
+        json.append("{")
+        json.append("\"name\":\"$name\",")
+        json.append("\"chain\":[${chain.joinToString(",")}],")
+        json.append("\"bypass\":[${bypass.joinToString(",")}],")
+        json.append("\"models\":[${models.joinToString(",")}],")
+        json.append("\"params\":{")
+        json.append(parameters.map { "\"${it.key}\":{${it.value.map { (pid, v) -> "\"$pid\":$v" }.joinToString(",")}}").joinToString(",")
+        json.append("}}")
+        return json.toString()
     }
 
     override fun toString(): String = buildString {
