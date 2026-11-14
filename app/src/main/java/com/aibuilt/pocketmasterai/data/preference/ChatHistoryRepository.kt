@@ -11,11 +11,13 @@ import kotlinx.coroutines.flow.Flow
 import androidx.room.Room
 
 class ChatHistoryRepository(context: Context) {
-    private val database = Room.databaseBuilder(
-        context.applicationContext,
-        PocketMasterDatabase::class.java,
-        "chat_history.db"
-    ).build()
+    private val database by lazy {
+        Room.databaseBuilder(
+            context.applicationContext,
+            PocketMasterDatabase::class.java,
+            "chat_history.db"
+        ).build()
+    }
 
     val chatDao: ChatDao
         get() = database.chatDao()

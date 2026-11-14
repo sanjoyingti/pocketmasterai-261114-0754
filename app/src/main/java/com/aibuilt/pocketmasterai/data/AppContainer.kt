@@ -40,22 +40,16 @@ class AppContainer(appContext: Context) {
     val toneSnapshotDao: ToneSnapshotDao
         get() = database.toneSnapshotDao()
 
-    private val midiDevice by lazy {
-        PocketMasterMidiManager(context)
-    }
-
-    private val fakeDevice = FakePocketMasterDevice()
+    private var _device: PocketMasterDevice = PocketMasterMidiManager(context)
+        set(value) {
+            field = value
+        }
 
     var useSimulator: Boolean = false
         set(value) {
             field = value
-            if (value) _device = fakeDevice else _device = midiDevice
+            _device = if (value) FakePocketMasterDevice() else PocketMasterMidiManager(context)
         }
-
-    private var _device: PocketMasterDevice by lazy {
-        midiDevice
-    }
-        private set
 
     val deviceState: PocketMasterDevice
         get() = _device
