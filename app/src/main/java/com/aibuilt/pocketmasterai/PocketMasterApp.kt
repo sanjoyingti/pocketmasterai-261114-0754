@@ -17,14 +17,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.aibuilt.pocketmasterai.ui.agent.AgentScreen
 import com.aibuilt.pocketmasterai.ui.chain.ChainScreen
 import com.aibuilt.pocketmasterai.ui.presets.PresetsScreen
 import com.aibuilt.pocketmasterai.ui.settings.SettingsScreen
+import com.aibuilt.pocketmasterai.ui.agent.AgentScreen
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Chain : Screen("chain", "Pedal Chain", Icons.Default.Dock)

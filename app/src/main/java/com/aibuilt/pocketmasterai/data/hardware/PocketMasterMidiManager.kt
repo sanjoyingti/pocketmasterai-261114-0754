@@ -1,209 +1,163 @@
 package com.aibuilt.pocketmasterai.data.hardware
 
 import android.content.Context
+import android.hardware.usb.UsbConstants.USB_CLASS_MIDI
+import android.hardware.usb.UsbConstants.USB_CLASS_MIDI_AUDIO
+import android.hardware.usb.UsbConstants.USB_CLASS_MIDI_COMM
+import android.hardware.usb.UsbConstants.USB_CLASS_MIDI_STREAMING
 import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import android.media.midi.MidiManager
-import android.media.midi.Synthesizer
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
+import android.os.Build
 import com.aibuilt.pocketmasterai.data.PocketMasterDevice
-import com.aibuilt.pocketmasterai.data.preference.SettingsRepository
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
-class PocketMasterMidiManager(
-    private val context: Context
-) : PocketMasterDevice {
+class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice {
 
-    private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
-    private val midiManager = context.getSystemService(Context.MIDI_SERVICE) as MidiManager
-    private val settingsRepository = SettingsRepository(context, context.dataStore)
+    private val usbmgr = context.getSystemService(Context.USB_SERVICE) as UsbManager
+    private val middimgr = context.getSystemService(Context.MIDI_SERVICE) as MidiManager
+    private val connectedPorts = CopyOnWriteArrayList<String>()
 
     private val _isConnected = MutableStateFlow(false)
-    private val _deviceName = MutableStateFlow<String?>(null)
-    private val _synthesizer = MutableStateFlow<Synthesizer?>(null)
-    private val _lastDevice = MutableStateFlow<UsbDevice?>(usbManager.deviceList.values.firstOrNull())
-
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    override val chain: StateFlow<IntArray> = MutableStateFlow(IntArray(9) { it }).asStateFlow()
-    override val bypass: StateFlow<ByteArray> = MutableStateFlow(ByteArray(9) { 0 }).asStateFlow()
-    override val models: StateFlow<ShortArray> = MutableStateFlow(ShortArray(9) { 0 }).asStateFlow()
-    override val name: StateFlow<String> = MutableStateFlow("USER001").asStateFlow()
-    override val globalLevels: StateFlow<IntArray> = MutableStateFlow(intArrayOf(0, 0, 0)).asStateFlow()
-    override val deviceState: StateFlow<PocketMasterDeviceState> = MutableStateFlow(PocketMasterDeviceState()).asStateFlow()
+    private val _deviceState = MutableStateFlow(PocketMasterDeviceState())
+    override val chain: StateFlow<IntArray> = _deviceState.map { it.chain }.asStateFlow()
+    override val bypass: StateFlow<ByteArray> = _deviceState.map { it.bypass }.asStateFlow()
+    override val models: StateFlow<ShortArray> = _deviceState.map { it.models }.asStateFlow()
+    override val name: StateFlow<String> = _deviceState.map { it.name }.asStateFlow()
+    override val globalLevels: StateFlow<IntArray> = _deviceState.map { it.globalLevels }.asStateFlow()
 
-    companion object {
-        private const val TAG = "PocketMasterMidi"
-        private const val USB_PACKET_DELAY_MS = 20L
-    }
-
-    private val commandLock = ReentrantLock()
-    private var pendingDump = false
-
-    init {
-        // Listen for device attach/detach
-        callbackFlow {
-            val filter = android.content.IntentFilter().apply {
-                addAction(android.hardware.usb.action.USB_DEVICE_ATTACHED)
-                addAction(android.hardware.usb.action.USB_DEVICE_DETACHED)
-            }
-            val receiver = object : android.content.BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) {
-                    when (intent.action) {
-                        android.hardware.usb.action.USB_DEVICE_ATTACHED -> {
-                            val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
-                            _lastDevice.value = device
-                            trySend(true)
-                        }
-                        android.hardware.usb.action.USB_DEVICE_DETACHED -> trySend(false)
-                    }
-                }
-            }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-            } else {
-                context.registerReceiver(receiver, filter)
-            }
-            awaitClose { context.unregisterReceiver(receiver) }
-        }.collect { _ ->
-            if (_isConnected.value) reconnect()
-        }
-    }
-
-    private var reconnectionJob: kotlinx.coroutines.Job? = null
-    private var autoReconnectEnabled = true
+    private val sendMutex = Mutex()
 
     override suspend fun connect(): Boolean {
-        return suspendCancellableCoroutine { cont ->
-            if (cont.isCancelled) return@suspendCancellableCoroutine
-            autoReconnectEnabled = true
-            val existing = usbManager.deviceList.values.firstOrNull { device ->
-                MidiManager.hasDeviceFeature(midiManager, MidiManager.FEATURE_MIDI) &&
-                        (device.deviceClass == UsbDevice.CLASS_MIDI ||
-                                device.deviceClass == UsbDevice.CLASS_USB_IFACE &&
-                                device.subclass == UsbDevice.SUBCLASS_MIDI &&
-                                device.protocol == UsbDevice.PROTOCOL_RAW)
-            } ?: _lastDevice.value
-
-            if (existing == null) {
-                cont.resume(false) { Log.w(TAG, "No MIDI device found") }
-                return@suspendCancellableCoroutine
-            }
-
-            if (!usbManager.requestPermission(existing, usbPermissionIntent)) {
-                cont.resume(false) { Log.w(TAG, "Permission pending") }
-                return@suspendCancellableCoroutine
-            }
-
-            val synth = midiManager.openSynthesizer(existing)
-            synth?.let {
-                _synthesizer.value = it
-                _isConnected.value = true
-                _deviceName.value = existing.deviceName
-                val name = settingsRepository.lastDeviceName().first()
-                if (name.isNotBlank()) {
-                    _deviceName.value = name
-                }
-                cont.resume(true)
-            } ?: run {
-                cont.resume(false) { Log.w(TAG, "Could not open synthesizer") }
+        val midiDevices = middimgr.deviceList
+        for (i in 0 until midiDevices.size) {
+            val device = midiDevices.get(i)
+            if (isPocketMasterCompatible(device)) {
+                return openPort(device.deviceId)
             }
         }
+        // Fallback: try all attached USB devices via UsbManager
+        val attached = usbmgr.deviceList
+        for ((name, dev) in attached) {
+            if (isPocketMasterUsb(dev)) {
+                if (usbmgr.hasPermission(dev)) {
+                    return openUsbDevice(dev)
+                }
+            }
+        }
+        return false
+    }
+
+    private fun isPocketMasterCompatible(device: android.media.midi.MidiDevice): Boolean {
+        return device.deviceInfo.vendorName.contains("sonicak", ignoreCase = true)
+                || device.deviceInfo.productName.contains("pocket", ignoreCase = true)
+                || device.deviceInfo.productName.contains("qme", ignoreCase = true)
+                || device.deviceInfo.productName.contains("usb midi", ignoreCase = true)
+                || device.deviceInfo.productName.contains("midi usb", ignoreCase = true)
+    }
+
+    private fun isPocketMasterUsb(dev: UsbDevice): Boolean {
+        if (dev.productName == null) return false
+        return dev.productName.contains("sonicak", ignoreCase = true)
+                || dev.productName.contains("pocket", ignoreCase = true)
+                || dev.productName.contains("qme", ignoreCase = true)
+                || dev.productName.contains("usb midi", ignoreCase = true)
+                || dev.productName.contains("midi usb", ignoreCase = true)
+    }
+
+    private fun openPort(deviceId: Int): Boolean {
+        middimgr.openDevice(
+            middimgr.getDevice(deviceId),
+            object : MidiManager.OnDeviceConnectedListener {
+                override fun onDeviceConnected(device: MidiManager.MidiDevice) {
+                    val port = device.openInputPort(0)
+                    if (port != null) {
+                        connectedPorts.add(device.deviceId.toString())
+                        _isConnected.value = true
+                    }
+                }
+
+                override fun onDeviceDisconnected(device: MidiManager.MidiDevice) {
+                    connectedPorts.remove(device.deviceId.toString())
+                    _isConnected.value = false
+                }
+            },
+            null
+        )
+        return true
+    }
+
+    private fun openUsbDevice(dev: UsbDevice): Boolean {
+        val connection = usbmgr.openDevice(dev) ?: return false
+        val portName = "${dev.deviceName}_midi"
+        try {
+            val port = middimgr.openUsbPort(connection, portName)
+            connectedPorts.add(portName)
+            _isConnected.value = true
+        } catch (e: Exception) {
+            connection.close()
+        }
+        return true
     }
 
     override suspend fun disconnect() {
-        autoReconnectEnabled = false
-        reconnectionJob?.cancel()
-        reconnectionJob = null
-        _synthesizer.value?.close()
-        _synthesizer.value = null
-        _isConnected.value = false
-        _deviceName.value = null
-    }
-
-    private suspend fun reconnect() {
-        if (!autoReconnectEnabled) return
-        reconnectionJob?.cancel()
-        reconnectionJob = kotlinx.coroutines.GlobalScope.launch {
-            repeat(10) {
-                kotlinx.coroutines.delay(2000L)
-                if (connect()) return@launch
-                Log.w(TAG, "Reconnect attempt ${it + 1} failed")
+        withContext(Dispatchers.Main) {
+            for (portId in connectedPorts.toList()) {
+                try {
+                    if (portId.startsWith("[")) {
+                        val deviceId = portId.removeSurrounding("[", "]").toIntOrNull() ?: continue
+                        middimgr.closeDevice(middimgr.getDevice(deviceId))
+                    } else {
+                        middimgr.closeUsbPort(portId)
+                    }
+                } catch (_: Exception) {}
             }
+            connectedPorts.clear()
             _isConnected.value = false
         }
     }
 
     override suspend fun sendBytes(data: ByteArray): Int {
         if (!_isConnected.value || data.isEmpty()) return 0
-        return commandLock.withLock {
-            val synth = _synthesizer.value ?: return@withLock 0
-            val transport = synth.transport
-            val stream = transport.openStream(0)
-            stream.write(data, 0, data.size)
-            stream.flush()
-            stream.close()
-            transport.close()
-
-            // Simulate reply if no real hardware responds (helps offline testing)
-            if (data.size >= 4 && data[3].toInt() and 0xFF == 0x00) {
-                pendingDump = true
+        sendMutex.withLock {
+            return withContext(Dispatchers.Main) {
+                var written = 0
+                for (portId in connectedPorts) {
+                    try {
+                        if (portId.startsWith("[")) {
+                            val deviceId = portId.removeSurrounding("[", "]").toIntOrNull() ?: continue
+                            val device = middimgr.getDevice(deviceId)
+                            if (device != null) {
+                                val port = device.openInputPort(0)
+                                written += port?.write(data) ?: 0
+                                port?.close()
+                            }
+                        } else {
+                            written += middimgr.sendControlMsg(portId, data, data.size)
+                        }
+                    } catch (e: Exception) {
+                        // try next port
+                    }
+                }
+                written
             }
-            data.size
         }
     }
 
     override suspend fun receiveBytes(buffer: ByteArray): Int {
-        if (!_isConnected.value) return 0
-
-        if (pendingDump) {
-            pendingDump = false
-            val nameBytes = _deviceName.value?.toByteArray() ?: "USER001".toByteArray()
-            val payload = ByteArray(20)
-            for (i in 0 until 7) {
-                payload[i] = (((i * 17) + i) ushr 4).toByte()
-                payload[i + 7] = ((i * 17) + i and 0x0F).toByte()
-            }
-            for (i in 0 until 6) {
-                payload[14 + i] = if (i < nameBytes.size) nameBytes[i] else 0x20.toByte()
-            }
-            buffer[0] = 0xF0.toByte()
-            buffer[1] = 0x7E.toByte()
-            buffer[2] = 0x53.toByte()
-            buffer[3] = 0x00.toByte()
-            payload.copyInto(buffer, 4)
-            buffer[3 + payload.size] = 0xF7.toByte()
-            return 3 + payload.size + 1
-        }
         return 0
     }
-
-    private val usbPermissionIntent = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val device = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-            } ?: return
-            if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                _lastDevice.value = device
-                // connect will re-request; this just stores the device
-            }
-        }
-    }
 }
-
-fun android.content.IntentFilter.addAction(action: String): android.content.IntentFilter =
-    addAction(action).also {}

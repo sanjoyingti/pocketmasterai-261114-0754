@@ -9,7 +9,6 @@ import com.aibuilt.pocketmasterai.data.agent.AiProviderRepository
 import com.aibuilt.pocketmasterai.data.agent.AiResponseEvent
 import com.aibuilt.pocketmasterai.data.agent.AgentToolDefinitions
 import com.aibuilt.pocketmasterai.data.agent.AgentToolExecutor
-import com.aibuilt.pocketmasterai.data.agent.GeminiProvider
 import com.aibuilt.pocketmasterai.data.agent.OpenAiCompatProvider
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterDevice
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
@@ -18,7 +17,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -142,30 +140,34 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
                 val baseUrl = aiProviderRepository.getOpenAiBaseUrl().first() ?: "https://api.deepseek.com/v1"
                 if (apiKey.isNotBlank()) OpenAiCompatProvider(apiKey, baseUrl, model) else null
             }
-            apiKey.isNotBlank() -> GeminiProvider(apiKey, oauth, model)
-            else -> {
-                addSystemMessage("No AI provider configured. Open Settings to select Google Gemini or an OpenAI-compatible endpoint (DeepSeek 4.1 Flash).")
-                _isAgentBusy.value = false
-                return
+            apiKey.isNotBlank() -> {
+                // Gemini provider needs a real Gemini key; if oauth only, fall back to info message
+                if (oauth != null) GeminiProvider(oauth, null, model) else null
             }
+            else -> null
         }
 
-        provider?.generate(
-            messages = listOf(AiMessage("user", text)),
-            tools = AgentToolDefinitions.TOOLS,
-            onEvent = { event ->
-                when (event) {
-                    is AiResponseEvent.TextChunk -> addAgentMessage(event.text)
-                    is AiResponseEvent.ToolCall -> handleToolCall(event.toolName, event.args)
-                    is AiResponseEvent.ToolResult -> addAgentMessage("Tool result: ${event.result}")
-                    is AiResponseEvent.Done -> _isAgentBusy.value = false
-                    is AiResponseEvent.Error -> {
-                        addAgentMessage("Error: ${event.message}")
-                        _isAgentBusy.value = false
+        if (provider != null) {
+            provider.generate(
+                messages = listOf(AiMessage("user", text)),
+                tools = AgentToolDefinitions.TOOLS,
+                onEvent = { event ->
+                    when (event) {
+                        is AiResponseEvent.TextChunk -> addAgentMessage(event.text)
+                        is AiResponseEvent.ToolCall -> handleToolCall(event.toolName, event.args)
+                        is AiResponseEvent.ToolResult -> addAgentMessage("Tool result: ${event.result.message()}")
+                        is AiResponseEvent.Done -> _isAgentBusy.value = false
+                        is AiResponseEvent.Error -> {
+                            addAgentMessage("Error: ${event.message}")
+                            _isAgentBusy.value = false
+                        }
                     }
                 }
-            }
-        )
+            )
+        } else {
+            addSystemMessage("No AI provider configured. Open Settings to select Google Gemini or an OpenAI-compatible endpoint (DeepSeek 4.1 Flash).")
+            _isAgentBusy.value = false
+        }
     }
 
     private fun addAgentMessage(text: String) {
@@ -184,14 +186,6 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         val result = toolExecutor.execute(toolName, args)
         _isAgentBusy.value = false
         addAgentMessage("Tool $toolName executed: ${result.message()}")
-    }
-
-    private fun AgentToolExecutor.Result.message(): String {
-        return when (this) {
-            is AgentToolExecutor.Result.Success -> "Success: $message"
-            is AgentToolExecutor.Result.Info -> "Info: $message"
-            is AgentToolExecutor.Result.Error -> "Error: $message"
-        }
     }
 
     fun undoTone() {
