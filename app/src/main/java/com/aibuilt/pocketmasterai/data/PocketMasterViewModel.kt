@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aibuilt.pocketmasterai.data.agent.AiMessage
 import com.aibuilt.pocketmasterai.data.agent.AiProvider
+import com.aibuilt.pocketmasterai.data.agent.AiProviderRepository
 import com.aibuilt.pocketmasterai.data.agent.AiResponseEvent
 import com.aibuilt.pocketmasterai.data.agent.AgentToolDefinitions
 import com.aibuilt.pocketmasterai.data.agent.AgentToolExecutor
@@ -17,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -24,6 +26,7 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
 
     private val device: PocketMasterDevice = container.deviceState
     private val toolExecutor = AgentToolExecutor(container.deviceState, container)
+    private val aiProviderRepository = container.aiProviderRepository
 
     private val _connectionStatus = MutableStateFlow("Disconnected")
     val connectionStatus: StateFlow<String> = _connectionStatus.asStateFlow()
@@ -105,7 +108,7 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             val current = device.bypass.value[block].toInt()
             val newBypass = (1 - current).toByte()
-            device.sendBytes(PocketMasterProtocol.setBlockState(block, newBypass.toInt() == 1))
+            device.sendBytes(PocketMasterProtocol.setBlockState(block, newBypass == 1.toByte()))
         }
     }
 
@@ -126,17 +129,17 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         _isAgentBusy.value = true
         _connectionStatus.value = "Agent processing..."
 
-        val providerName = container.aiProviderRepository.getSelectedProvider().first()
-        val model = container.aiProviderRepository.getSelectedModel().first() ?: "gemini-2.0-flash"
+        val providerName = aiProviderRepository.getSelectedProvider().first()
+        val model = aiProviderRepository.getSelectedModel().first() ?: "gemini-2.0-flash"
         val apiKey = when (providerName) {
-            "openai" -> container.aiProviderRepository.getOpenAiApiKey().first() ?: ""
-            else -> container.aiProviderRepository.getGeminiApiKey().first() ?: ""
+            "openai" -> aiProviderRepository.getOpenAiApiKey().first() ?: ""
+            else -> aiProviderRepository.getGeminiApiKey().first() ?: ""
         }
-        val oauth = container.aiProviderRepository.getOauthToken().first()
+        val oauth = aiProviderRepository.getOauthToken().first()
 
         val provider: AiProvider? = when {
             providerName == "openai" -> {
-                val baseUrl = container.aiProviderRepository.getOpenAiBaseUrl().first() ?: "https://api.deepseek.com/v1"
+                val baseUrl = aiProviderRepository.getOpenAiBaseUrl().first() ?: "https://api.deepseek.com/v1"
                 if (apiKey.isNotBlank()) OpenAiCompatProvider(apiKey, baseUrl, model) else null
             }
             apiKey.isNotBlank() -> GeminiProvider(apiKey, oauth, model)
@@ -200,12 +203,6 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
     fun applyToneToChain() {
         viewModelScope.launch {
             _connectionStatus.value = "Applying tone to chain..."
-        }
-    }
-
-    fun savePresetSlot(slot: Int, name: String) {
-        viewModelScope.launch {
-            _connectionStatus.value = "Saving preset to P${slot.toString().padStart(2, '0')}..."
         }
     }
 

@@ -3,75 +3,58 @@ package com.aibuilt.pocketmasterai.data.agent
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.aibuilt.pocketmasterai.data.preference.SettingsRepository
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "ai_provider_settings")
 
 class AiProviderRepository(private val context: Context) {
 
-    suspend fun getSelectedProvider(): String {
-        return context.dataStore.data.map { it[KEY_AI_PROVIDER] ?: "google" }.first()
-    }
+    fun getSelectedProvider(): Flow<String> =
+        context.dataStore.data.map { it[KEY_AI_PROVIDER] ?: "google" }
 
-    suspend fun getGeminiApiKey(): String? {
-        return context.dataStore.data.map { it[KEY_GEMINI_API_KEY] }.first()
-    }
+    fun getGeminiApiKey(): Flow<String?> =
+        context.dataStore.data.map { it[KEY_GEMINI_API_KEY] }
 
-    suspend fun getOauthToken(): String? {
-        return context.dataStore.data.map { it[KEY_OAUTH_TOKEN] }.first()
-    }
+    fun getOauthToken(): Flow<String?> =
+        context.dataStore.data.map { it[KEY_OAUTH_TOKEN] }
 
-    suspend fun getOpenAiApiKey(): String? {
-        return context.dataStore.data.map { it[KEY_OPENAI_API_KEY] }.first()
-    }
+    fun getOpenAiApiKey(): Flow<String?> =
+        context.dataStore.data.map { it[KEY_OPENAI_API_KEY] }
 
-    suspend fun getOpenAiBaseUrl(): String? {
-        return context.dataStore.data.map { it[KEY_OPENAI_BASE_URL] }.first()
-    }
+    fun getOpenAiBaseUrl(): Flow<String?> =
+        context.dataStore.data.map { it[KEY_OPENAI_BASE_URL] }
 
-    suspend fun getSelectedModel(): String? {
-        return context.dataStore.data.map { it[KEY_SELECTED_MODEL] }.first()
-    }
+    fun getSelectedModel(): Flow<String?> =
+        context.dataStore.data.map { it[KEY_SELECTED_MODEL] }
 
     suspend fun setSelectedProvider(provider: String) {
-        context.dataStore.edit {
-            it[KEY_AI_PROVIDER] = provider
-        }
+        context.dataStore.edit { it[KEY_AI_PROVIDER] = provider }
     }
 
     suspend fun setGeminiApiKey(key: String) {
-        context.dataStore.edit {
-            it[KEY_GEMINI_API_KEY] = key
-        }
+        context.dataStore.edit { it[KEY_GEMINI_API_KEY] = key }
     }
 
     suspend fun setOauthToken(token: String) {
-        context.dataStore.edit {
-            it[KEY_OAUTH_TOKEN] = token
-        }
+        context.dataStore.edit { it[KEY_OAUTH_TOKEN] = token }
     }
 
     suspend fun setOpenAiApiKey(key: String) {
-        context.dataStore.edit {
-            it[KEY_OPENAI_API_KEY] = key
-        }
+        context.dataStore.edit { it[KEY_OPENAI_API_KEY] = key }
     }
 
     suspend fun setOpenAiBaseUrl(url: String) {
-        context.dataStore.edit {
-            it[KEY_OPENAI_BASE_URL] = url
-        }
+        context.dataStore.edit { it[KEY_OPENAI_BASE_URL] = url }
     }
 
     suspend fun setSelectedModel(model: String) {
-        context.dataStore.edit {
-            it[KEY_SELECTED_MODEL] = model
-        }
+        context.dataStore.edit { it[KEY_SELECTED_MODEL] = model }
     }
 
     companion object {
