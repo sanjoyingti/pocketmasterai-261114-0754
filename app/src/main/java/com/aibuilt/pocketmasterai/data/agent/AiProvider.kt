@@ -277,44 +277,44 @@ class OpenAiCompatProvider(
 
     private fun parseOpenAiResponse(body: String, onEvent: (AiResponseEvent) -> Unit) {
         val json = extractObject(body) ?: return
-        val choice = extractChoiceContent(json)
-        if (choice.isNotEmpty()) {
-            onEvent(AiResponseEvent.TextChunk(choice))
-            return
+        val choices = json.substringAfter("\"choices\":")
+        val choice = choices.substringAfter("{")
+        val finishReasonStart = json.indexOf("\"finish_reason\"")
+        val choiceEnd = if (finishReasonStart > 0) finishReasonStart else json.indexOf("}", json.indexOf("}", json.indexOf("content\"")) + 1)
+        val choiceJson = json.substring(json.indexOf("{", json.indexOf("content\"")), choiceEnd)
+
+        val contentStart = choiceJson.indexOf("\"content\"")
+        if (contentStart >= 0) {
+            val text = extractStringInsideQuotes(choiceJson, contentStart + 10)
+            if (text.isNotEmpty()) {
+                onEvent(AiResponseEvent.TextChunk(text))
+            }
         }
-        val functionName = extractFirstString(json, "\"name\"")
-        if (functionName != null) {
-            val args = extractArgsForObject(json, functionName)
-            onEvent(AiResponseEvent.ToolCall(functionName, args))
-            return
-        }
-        val text = extractFirstString(json, "\"content\"")
-        if (text != null && text.isNotEmpty()) {
-            onEvent(AiResponseEvent.TextChunk(text))
+
+        val toolCallsStart = json.indexOf("\"tool_calls\"")
+        if (toolCallsStart >= 0) {
+            val funcStart = json.indexOf("{", toolCallsStart)
+            val funcEnd = json.indexOf("}", funcStart)
+            if (funcStart > 0 && funcEnd > funcStart) {
+                val funcJson = json.substring(funcStart, funcEnd)
+                val fnameStart = funcJson.indexOf("\"name\"")
+                if (fnameStart > 0) {
+                    val fname = extractSimpleString(funcJson, fnameStart + "\"name\"".length) ?: return
+                    val argsStart = funcJson.indexOf("{", fnameStart)
+                    val argsEnd = funcJson.indexOf("}", argsStart)
+                    if (argsStart > 0 && argsEnd > argsStart) {
+                        val argsJson = funcJson.substring(argsStart + 1, argsEnd)
+                        val args = parseFunctionArgs(argsJson)
+                        onEvent(AiResponseEvent.ToolCall(fname, args))
+                    }
+                }
+            }
         }
     }
 
-    private fun extractChoiceContent(json: String): String {
-        val idx = json.indexOf("\"choices\"")
-        if (idx < 0) return ""
-        val block = json.substring(idx)
-        val content = block.substringAfter("\"content\":\"")
-        return content.takeWhile { it != '"' }.replace("\\n", "\n")
-    }
-
-    private fun extractArgsForObject(json: String, funcName: String): Map<String, Any> {
-        val argsStart = json.indexOf("\"arguments\":{")
-        if (argsStart < 0) return emptyMap()
-        val argsEnd = json.indexOf("}}", argsStart)
-        val argsJson = if (argsEnd < 0) json.substring(argsStart + 12) else json.substring(argsStart + 12, argsEnd)
-        return parseFunctionArgs(argsJson)
-    }
-
-    private fun extractFirstString(json: String, key: String): String? {
-        val start = json.indexOf("\"$key\"")
-        if (start < 0) return null
-        val q = json.indexOf('"', start + key.length + 1)
-        if (q < 0) return null
+    private fun extractStringInsideQuotes(json: String, from: Int): String {
+        val q = json.indexOf('"', from)
+        if (q < 0) return ""
         var end = q + 1
         var escape = false
         while (end < json.length) {
@@ -324,6 +324,6 @@ class OpenAiCompatProvider(
             else if (c == '"') break
             else end++
         }
-        return if (end > q + 1) json.substring(q + 1, end) else null
+        return if (end > q + 1) json.substring(q + 1, end).replace("\\n", "\n") else ""
     }
 }

@@ -2,6 +2,11 @@ package com.aibuilt.pocketmasterai.data.agent
 
 object AgentToolDefinitions {
 
+    data class ToolDef(
+        val name: String,
+        val description: String
+    )
+
     // A single unified tool schema usable by Gemini function calling OR OpenAI tools.
     val TOOLS = listOf(
         ToolDef(
@@ -53,43 +58,4 @@ object AgentToolDefinitions {
             description = "Capture the current working tone as a snapshot that can be restored later (undo/revert). Returns a short snapshot id."
         )
     )
-
-    // Parameter meta needed for function-calling parameter definitions.
-    fun paramDef(name: String, description: String, required: Boolean = true): String {
-        return "\"$name\": {\"type\": \"integer\", \"description\": \"$description\"${if (required) ", \"required\": true" else ""}}"
-    }
-
-    fun toolSchema(index: Int): String {
-        val t = TOOLS[index]
-        return buildString {
-            append("{")
-            append("\"name\": \"${t.name}\",")
-            append("\"description\": \"${t.description}\",")
-            append("\"parameters\": {\"type\": \"object\", \"properties\": {")
-            append(paramDef("block", "Block index in the 9-slot chain (0=NR, 1=FX1, 2=DRV, 3=AMP, 4=IR, 5=EQ, 6=FX2, 7=DLY, 8=RVB)"))
-            append(", ")
-            append(paramDef("modelId", "Numeric model index from the device map"))
-            append(", ")
-            append(paramDef("value", "Parameter value, integer 0-127"))
-            append(", ")
-            append(paramDef("presetSlot", "Preset slot string like P01, P50, F01"))
-            append(", ")
-            append(paramDef("query", "The search query string"))
-            append(", ")
-            append(paramDef("url", "The full URL to fetch"))
-            append(", ")
-            append(paramDef("bypassed", "Whether the block should be bypassed (true) or enabled (false)"))
-            append(", ")
-            append(paramDef("slotName", "User preset name, 1-10 characters"))
-            append(", ")
-            append(paramDef("usbVolume", "USB output volume 0-100"))
-            append(", ")
-            append(paramDef("mainVolume", "Main output volume 0-100"))
-            append(", ")
-            append(paramDef("headphoneVolume", "Headphone volume 0-100"))
-            append("}, \"required\": [\"block\", \"modelId\", \"value\", \"presetSlot\", \"query\", \"url\", \"bypassed\", \"slotName\", \"usbVolume\", \"mainVolume\", \"headphoneVolume\"]")
-            append("}")
-            append("}")
-        }
-    }
 }

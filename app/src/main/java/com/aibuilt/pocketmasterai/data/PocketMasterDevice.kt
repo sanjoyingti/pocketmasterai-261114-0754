@@ -1,32 +1,35 @@
-package com.aibuilt.pocketmasterai.data
+DELETE
 
-import com.aibuilt.pocketmasterai.data.hardware.PocketMasterDeviceState
-import kotlinx.coroutines.flow.StateFlow
+=== FILE: app/src/main/java/com/aibuilt/pocketmasterai/data/local/dao/ChatDao.kt ===
+=== ABOUT: Fixed a duplicate PocketMasterDevice interface and restored the ViewModel that AgentScreen/AgentToolExecutor expect ===
+package com.aibuilt.pocketmasterai.data.local.dao
 
-interface PocketMasterDevice {
-    companion object {
-        const val BLOCK_NR = 0
-        const val BLOCK_FX1 = 1
-        const val BLOCK_DRV = 2
-        const val BLOCK_AMP = 3
-        const val BLOCK_IR = 4
-        const val BLOCK_EQ = 5
-        const val BLOCK_FX2 = 6
-        const val BLOCK_DLY = 7
-        const val BLOCK_RVB = 8
-        const val NUM_BLOCKS = 9
-    }
+import androidx.room.*
+import com.aibuilt.pocketmasterai.data.local.ChatMessage
+import com.aibuilt.pocketmasterai.data.local.ChatSession
+import com.aibuilt.pocketmasterai.data.local.PocketMasterDatabase
+import kotlinx.coroutines.flow.Flow
 
-    val isConnected: StateFlow<Boolean>
-    val chain: StateFlow<IntArray>
-    val bypass: StateFlow<ByteArray>
-    val models: StateFlow<ShortArray>
-    val name: StateFlow<String>
-    val globalLevels: StateFlow<IntArray>
-    val deviceState: StateFlow<PocketMasterDeviceState>
+@Dao
+interface ChatDao {
+    @Query("SELECT * FROM chat_session ORDER BY created_at DESC")
+    fun getAllSessions(): Flow<List<ChatSession>>
 
-    suspend fun connect(): Boolean
-    suspend fun disconnect()
-    suspend fun sendBytes(data: ByteArray): Int
-    suspend fun receiveBytes(buffer: ByteArray): Int
+    @Query("SELECT * FROM chat_message WHERE session_id = :sessionId ORDER BY created_at ASC")
+    fun getMessagesBySession(sessionId: Long): Flow<List<ChatMessage>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessage(message: ChatMessage): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSession(session: ChatSession): Long
+
+    @Update
+    suspend fun updateSession(session: ChatSession)
+
+    @Query("DELETE FROM chat_message WHERE session_id = :sessionId")
+    suspend fun deleteMessagesBySession(sessionId: Long)
+
+    @Query("DELETE FROM chat_session WHERE id = :sessionId")
+    suspend fun deleteSession(sessionId: Long)
 }
