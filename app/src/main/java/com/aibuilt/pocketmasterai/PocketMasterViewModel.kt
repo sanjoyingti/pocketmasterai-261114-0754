@@ -107,15 +107,33 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun saveCurrentPreset() {
+    fun undoTone() {
         viewModelScope.launch {
-            _connectionStatus.value = "Saving preset..."
+            _connectionStatus.value = "Reverting tone to last snapshot..."
         }
     }
 
-    fun loadPreset(slotName: String) {
+    fun applyToneToChain() {
         viewModelScope.launch {
-            _connectionStatus.value = "Loading $slotName..."
+            _connectionStatus.value = "Applying tone to chain..."
+        }
+    }
+
+    fun savePresetSlot(slot: Int) {
+        viewModelScope.launch {
+            _connectionStatus.value = "Saving preset to P${slot.toString().padStart(2, '0')}..."
+        }
+    }
+
+    fun loadPreset(slot: Int) {
+        viewModelScope.launch {
+            _connectionStatus.value = "Loading P${slot.toString().padStart(2, '0')}..."
+        }
+    }
+
+    fun saveCurrentPreset() {
+        viewModelScope.launch {
+            _connectionStatus.value = "Saving preset..."
         }
     }
 

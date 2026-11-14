@@ -1,4 +1,4 @@
-package com.aibuilt.pocketmasterai.data
+package com.aibuilt.pocketmasterai.data.hardware
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

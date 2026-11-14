@@ -13,6 +13,7 @@ class UsbDeviceBroadcastReceiver : BroadcastReceiver() {
             val filter = IntentFilter().apply {
                 addAction(android.hardware.usb.action.USB_DEVICE_ATTACHED)
                 addAction(android.hardware.usb.action.USB_DEVICE_DETACHED)
+                addAction(android.hardware.usb.action.USB_PERMISSION)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.registerReceiver(this, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -38,11 +39,15 @@ class UsbDeviceBroadcastReceiver : BroadcastReceiver() {
                     )[PocketMasterViewModel::class]
                     viewModel.disconnect()
                 }
+                android.hardware.usb.action.USB_PERMISSION -> {
+                    // Permission request handled via UsbManager directly by the MidiManager flow.
+                }
             }
         }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        // Handled directly by MainActivity with the AppContainer available.
+        val container = AppContainer(context)
+        handleIntent(context, container, intent)
     }
 }

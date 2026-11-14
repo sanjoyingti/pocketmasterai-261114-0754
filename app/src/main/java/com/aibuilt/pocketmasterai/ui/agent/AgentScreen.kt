@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -28,9 +29,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -45,7 +46,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
-import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
 import kotlinx.coroutines.launch
 
 @Composable
@@ -96,7 +96,7 @@ fun AgentScreen(
 
             Text("Undo / Revert Tone", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
-            RevertToneCard()
+            RevertToneCard(onUndo = { viewModel.undoTone() })
             Spacer(modifier = Modifier.height(16.dp))
 
             TonePreviewCard(title = "Sultans of Swing - Hard Rock Amp Mode")
@@ -150,7 +150,7 @@ fun ToolStatusPill(text: String) {
 }
 
 @Composable
-fun RevertToneCard() {
+fun RevertToneCard(onUndo: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -164,6 +164,8 @@ fun RevertToneCard() {
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Icon(Icons.Default.Undo, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
             Text("Undo / Revert Tone", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
         }
     }
@@ -220,7 +222,7 @@ fun MessageInput(onSend: (String) -> Unit) {
                     text = ""
                 }
             },
-            colors = ButtonDefaults.outlinedButtonColors(
+            colors = OutlinedButtonDefaults.outlinedButtonColors(
                 contentColor = MaterialTheme.colorScheme.primary
             )
         ) {
