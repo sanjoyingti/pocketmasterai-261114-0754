@@ -1,8 +1,7 @@
 package com.aibuilt.pocketmasterai.data.hardware
 
-import kotlinx.coroutines.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
@@ -17,18 +16,17 @@ class FakePocketMasterDevice(
 
     override val isConnected: StateFlow<Boolean> = MutableStateFlow(true)
 
-    // Simulated 9-slot chain state
-    private val _chain = MutableStateFlow(IntArray(NUM_BLOCKS) { i -> i })
-    private val _bypass = MutableStateFlow(ByteArray(NUM_BLOCKS) { 0 })
-    private val _models = MutableStateFlow(ShortArray(NUM_BLOCKS) { 0 })
-    private val _params = MutableStateFlow(HashMap<Int, HashMap<Int, Short>>(NUM_BLOCKS))
+    private val _chain = MutableStateFlow(IntArray(PocketMasterProtocol.NUM_BLOCKS) { i -> i })
+    private val _bypass = MutableStateFlow(ByteArray(PocketMasterProtocol.NUM_BLOCKS) { 0 })
+    private val _models = MutableStateFlow(ShortArray(PocketMasterProtocol.NUM_BLOCKS) { 0 })
+    private val _params = MutableStateFlow(HashMap<Int, HashMap<Int, Short>>(PocketMasterProtocol.NUM_BLOCKS))
     private val _name = MutableStateFlow("USER001")
     private val _globalLevels = MutableStateFlow(intArrayOf(0, 0, 0))
     private val _dropPacketChance = dropPacketChance
 
     override val chain: StateFlow<IntArray> = _chain.asStateFlow()
     override val bypass: StateFlow<ByteArray> = _bypass.asStateFlow()
-    override val models: StateFlow<ShortArray> = _models.asStateFlow()
+    override val models: StateFlow<shortArray> = _models.asStateFlow()
     override val params: StateFlow<HashMap<Int, HashMap<Int, Short>>> = _params.asStateFlow()
     override val name: StateFlow<String> = _name.asStateFlow()
     override val globalLevels: StateFlow<intArrayOf> = _globalLevels.asStateFlow()
@@ -38,9 +36,9 @@ class FakePocketMasterDevice(
 
     private var dumpResponded = true
 
-    override suspend fun connect() {
+    override suspend fun connect(): Boolean {
         _isConnected.value = true
-        delay(200)
+        return true
     }
 
     override suspend fun disconnect() {
@@ -69,12 +67,11 @@ class FakePocketMasterDevice(
                 out[14 + i] = if (i < nameBytes.size) nameBytes[i] else 0x20.toByte()
             }
             val payload = ByteArray(out.size + 4)
-            payload[0] = OP_EDIT_BUFFER_DUMP.toByte()
+            payload[0] = PocketMasterProtocol.OP_EDIT_BUFFER_DUMP.toByte()
             out.copyInto(payload, 1)
-            val cmd = PocketMasterProtocol.buildSysex(ByteArray(0)) // placeholder
             buffer[0] = 0xF0
-            buffer[1] = SYSEX_ID.toByte()
-            buffer[2] = DEVICE_ID.toByte()
+            buffer[1] = PocketMasterProtocol.SYSEX_ID.toByte()
+            buffer[2] = PocketMasterProtocol.DEVICE_ID.toByte()
             payload.copyInto(buffer, 3)
             buffer[3 + payload.size] = 0xF7
             return 3 + payload.size + 1
@@ -90,21 +87,21 @@ class FakePocketMasterDevice(
         if (cmd.size < 4) return false
         val op = cmd[3].toInt() and 0xFF
         when (op) {
-            OP_EDIT_BUFFER_DUMP -> dumpResponded = true
-            OP_EDIT_BUFFER_NAME -> {
-                val n = String(cmd.copyOfRange(4, 10)).replace(Regex("[\u0000-\u001F\u007F-\u009F]"), "")
+            PocketMasterProtocol.OP_EDIT_BUFFER_DUMP -> dumpResponded = true
+            PocketMasterProtocol.OP_EDIT_BUFFER_NAME -> {
+                val n = String(cmd.copyOfRange(4, 10)).replace(Regex("[\\u0000-\\u001F\\u007F-\\u009F]"), "")
                 _name.value = n
             }
-            OP_SET_BLOCK_STATE -> {
+            PocketMasterProtocol.OP_SET_BLOCK_STATE -> {
                 val block = cmd[4].toInt() and 0xFF
                 _bypass.value[block] = cmd[5].toByte()
             }
-            OP_SET_BLOCK_MODEL -> {
+            PocketMasterProtocol.OP_SET_BLOCK_MODEL -> {
                 val block = cmd[4].toInt() and 0xFF
                 val mid = ((cmd[5].toInt() and 0xFF) shl 8) or (cmd[6].toInt() and 0xFF)
                 _models.value[block] = mid.toShort()
             }
-            OP_SET_PARAMETER -> {
+            PocketMasterProtocol.OP_SET_PARAMETER -> {
                 val block = cmd[4].toInt() and 0xFF
                 val pid = ((cmd[5].toInt() and 0xFF) shl 8) or (cmd[6].toInt() and 0xFF)
                 val valHi = cmd[7].toInt() and 0xFF
@@ -112,12 +109,12 @@ class FakePocketMasterDevice(
                 val value = (valHi shl 8) or valLo
                 _params.getOrPut(block) { HashMap() }[pid] = value.toShort()
             }
-            OP_CHAIN_REORDER -> {
-                val newChain = IntArray(NUM_BLOCKS)
+            PocketMasterProtocol.OP_CHAIN_REORDER -> {
+                val newChain = IntArray(PocketMasterProtocol.NUM_BLOCKS)
                 cmd.copyOfRange(4, 13).forEachIndexed { i, b -> newChain[i] = b.toInt() and 0xFF }
                 _chain.value = newChain
             }
-            OP_SET_GLOBAL_LEVELS -> {
+            PocketMasterProtocol.OP_SET_GLOBAL_LEVELS -> {
                 _globalLevels.value = intArrayOf(
                     cmd[4].toInt() and 0xFF,
                     cmd[5].toInt() and 0xFF,
