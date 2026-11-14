@@ -3,6 +3,7 @@ package com.aibuilt.pocketmasterai.data.local.dao
 import androidx.room.*
 import com.aibuilt.pocketmasterai.data.local.ChatMessage
 import com.aibuilt.pocketmasterai.data.local.ChatSession
+import com.aibuilt.pocketmasterai.data.local.PocketMasterDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao

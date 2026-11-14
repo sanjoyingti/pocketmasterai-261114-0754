@@ -25,11 +25,17 @@ class UsbDeviceBroadcastReceiver : BroadcastReceiver() {
             when (intent.action) {
                 android.hardware.usb.action.USB_DEVICE_ATTACHED -> {
                     container.useSimulator = false
-                    val viewModel = PocketMasterViewModelFactory(container)[PocketMasterViewModel::class]
+                    val viewModel = ViewModelProvider(
+                        context,
+                        PocketMasterViewModel.Factory(container)
+                    )[PocketMasterViewModel::class]
                     viewModel.requestDevice()
                 }
                 android.hardware.usb.action.USB_DEVICE_DETACHED -> {
-                    val viewModel = PocketMasterViewModelFactory(container)[PocketMasterViewModel::class]
+                    val viewModel = ViewModelProvider(
+                        context,
+                        PocketMasterViewModel.Factory(container)
+                    )[PocketMasterViewModel::class]
                     viewModel.disconnect()
                 }
             }
@@ -37,7 +43,6 @@ class UsbDeviceBroadcastReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        // This is only used as a fallback; the app registers the receiver in MainActivity
-        // and calls handleIntent directly with the AppContainer available.
+        // Handled directly by MainActivity with the AppContainer available.
     }
 }
