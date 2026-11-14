@@ -1,5 +1,6 @@
 package com.aibuilt.pocketmasterai.data.agent
 
+import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -83,7 +84,7 @@ class GeminiProvider(
             val request = Request.Builder()
                 .url(url)
                 .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .headers(okhttp3.Headers.of(headers))
+                .headers(Headers.of(headers))
                 .build()
 
             val response = okHttpClient.newCall(request).execute()
@@ -277,44 +278,86 @@ class OpenAiCompatProvider(
 
     private fun parseOpenAiResponse(body: String, onEvent: (AiResponseEvent) -> Unit) {
         val json = extractObject(body) ?: return
-        val choices = json.substringAfter("\"choices\":")
-        val choice = choices.substringAfter("{")
-        val finishReasonStart = json.indexOf("\"finish_reason\"")
-        val choiceEnd = if (finishReasonStart > 0) finishReasonStart else json.indexOf("}", json.indexOf("}", json.indexOf("content\"")) + 1)
-        val choiceJson = json.substring(json.indexOf("{", json.indexOf("content\"")), choiceEnd)
+        val choiceEnd = findChoiceEnd(json)
+        if (choiceEnd < 0) return
+        val choiceJson = json.substring(0, choiceEnd)
 
         val contentStart = choiceJson.indexOf("\"content\"")
         if (contentStart >= 0) {
-            val text = extractStringInsideQuotes(choiceJson, contentStart + 10)
+            val text = extractStringInsideQuotes(choiceJson, contentStart + "\"content\"".length)
             if (text.isNotEmpty()) {
                 onEvent(AiResponseEvent.TextChunk(text))
             }
         }
 
-        val toolCallsStart = json.indexOf("\"tool_calls\"")
+        val toolCallsStart = choiceJson.indexOf("\"tool_calls\"")
         if (toolCallsStart >= 0) {
             val funcStart = json.indexOf("{", toolCallsStart)
-            val funcEnd = json.indexOf("}", funcStart)
-            if (funcStart > 0 && funcEnd > funcStart) {
-                val funcJson = json.substring(funcStart, funcEnd)
-                val fnameStart = funcJson.indexOf("\"name\"")
-                if (fnameStart > 0) {
-                    val fname = extractSimpleString(funcJson, fnameStart + "\"name\"".length) ?: return
-                    val argsStart = funcJson.indexOf("{", fnameStart)
-                    val argsEnd = funcJson.indexOf("}", argsStart)
-                    if (argsStart > 0 && argsEnd > argsStart) {
-                        val argsJson = funcJson.substring(argsStart + 1, argsEnd)
-                        val args = parseFunctionArgs(argsJson)
-                        onEvent(AiResponseEvent.ToolCall(fname, args))
-                    }
-                }
+            val funcEnd = findMatchingBrace(json, funcStart)
+            if (funcStart >= 0 && funcEnd >= 0) {
+                val funcJson = json.substring(funcStart, funcEnd + 1)
+                parseFunctionCallFromOpenAi(funcJson, onEvent)
             }
         }
     }
 
-    private fun extractStringInsideQuotes(json: String, from: Int): String {
+    private fun findChoiceEnd(json: String): Int {
+        val choicesStart = json.indexOf("\"choices\"")
+        if (choicesStart < 0) return -1
+        val arrStart = json.indexOf("[", choicesStart)
+        if (arrStart < 0) return -1
+        var depth = 0
+        var i = arrStart
+        while (i < json.length) {
+            when (json[i]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return i
+                }
+            }
+            i++
+        }
+        return -1
+    }
+
+    private fun findMatchingBrace(json: String, start: Int): Int {
+        var depth = 0
+        var i = start
+        while (i < json.length) {
+            when (json[i]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return i
+                }
+            }
+            i++
+        }
+        return -1
+    }
+
+    private fun parseFunctionCallFromOpenAi(json: String, onEvent: (AiResponseEvent) -> Unit) {
+        val nameStart = json.indexOf("\"name\"")
+        if (nameStart < 0) return
+        val name = extractSimpleString(json, nameStart + "\"name\"".length) ?: return
+        val argsStart = json.indexOf("{", nameStart)
+        if (argsStart < 0) {
+            val argStart = json.indexOf("arguments\"", nameStart)
+            if (argStart < 0) return
+            val argsStr = extractStringInsideQuotes(json, argStart + "\"arguments\"".length) ?: return
+            onEvent(AiResponseEvent.ToolCall(name, parseFunctionArgs(argsStr)))
+            return
+        }
+        val argsEnd = findMatchingBrace(json, argsStart)
+        if (argsStart < 0 || argsEnd < 0) return
+        val argsJson = json.substring(argsStart + 1, argsEnd)
+        onEvent(AiResponseEvent.ToolCall(name, parseFunctionArgs(argsJson)))
+    }
+
+    private fun extractStringInsideQuotes(json: String, from: Int): String? {
         val q = json.indexOf('"', from)
-        if (q < 0) return ""
+        if (q < 0) return null
         var end = q + 1
         var escape = false
         while (end < json.length) {
@@ -324,6 +367,37 @@ class OpenAiCompatProvider(
             else if (c == '"') break
             else end++
         }
-        return if (end > q + 1) json.substring(q + 1, end).replace("\\n", "\n") else ""
+        return if (end > q + 1) json.substring(q + 1, end) else null
     }
+
+    private fun String.escapeJson(): String =
+        this.replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+
+    private fun String.escapeUrl(): String =
+        this.replace(" ", "%20").replace("<", "%3C").replace(">", "%3E")
+            .replace("&", "%26").replace("\"", "%22")
+}
+
+class AiProviderRepository(
+    private val context: android.content.Context
+) {
+    private val settings = SettingsRepository(context, context.dataStore)
+
+    suspend fun getSelectedProvider(): String = settings.getAiProvider().first()
+    suspend fun getSelectedModel(): String? = settings.getSelectedModel().first()
+    suspend fun getGeminiApiKey(): String? = settings.getGeminiApiKey().first()
+    suspend fun getOpenAiApiKey(): String? = settings.getOpenAiApiKey().first()
+    suspend fun getOpenAiBaseUrl(): String? = settings.getOpenAiBaseUrl().first()
+    suspend fun getOauthToken(): String? = settings.getOauthToken().first()
+
+    suspend fun setProvider(provider: String) { settings.setAiProvider(provider) }
+    suspend fun setModel(model: String) { settings.setSelectedModel(model) }
+    suspend fun setGeminiApiKey(key: String) { settings.setGeminiApiKey(key) }
+    suspend fun setOpenAiApiKey(key: String) { settings.setOpenAiApiKey(key) }
+    suspend fun setOpenAiBaseUrl(url: String) { settings.setOpenAiBaseUrl(url) }
+    suspend fun setOauthToken(token: String) { settings.setOauthToken(token) }
 }
