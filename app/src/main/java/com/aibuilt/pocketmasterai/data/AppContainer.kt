@@ -1,4 +1,4 @@
-package com.aibuilt.pocketmasterai.data
+package com.aibuilt.pocketmasterai
 
 import android.content.Context
 import android.content.res.AssetManager
@@ -59,4 +59,10 @@ class AppContainer(private val appContext: Context) {
     }
 
     fun getDeviceMap(): DeviceMapRepository? = deviceMapRepository
+
+    suspend fun loadDeviceMap(assetManager: AssetManager) {
+        withContext(Dispatchers.IO) {
+            deviceMapRepository.setMap(deviceMapRepository.loadFromAssets(assetManager))
+        }
+    }
 }
