@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.rememberNavController
 import com.aibuilt.pocketmasterai.ui.theme.PocketMasterTheme
@@ -23,15 +24,17 @@ class MainActivity : ComponentActivity() {
         getSystemService(Context.MIDI_SERVICE) as MidiManager
     }
 
+    private val container = AppContainer(applicationContext)
+    private val viewModel = ViewModelProvider(
+        this,
+        PocketMasterViewModel.Factory(container)
+    )[PocketMasterViewModel::class]
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val container = remember { AppContainer(applicationContext) }
         UsbDeviceBroadcastReceiver.register(this, container)
-        val viewModel = ViewModelProvider(
-            this,
-            PocketMasterViewModel.Factory(container)
-        )[PocketMasterViewModel::class]
+        container.deviceState.connect()
         setContent {
             PocketMasterTheme {
                 PocketMasterApp(container = container, viewModel = viewModel)
@@ -41,6 +44,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
-        UsbDeviceBroadcastReceiver.handleIntent(this, AppContainer(applicationContext), intent)
+        UsbDeviceBroadcastReceiver.handleIntent(this, container, intent)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        container.deviceState.disconnect()
     }
 }

@@ -46,16 +46,16 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
     override val models: StateFlow<ShortArray> = _deviceState.map { it.models }.asStateFlow()
     override val name: StateFlow<String> = _deviceState.map { it.name }.asStateFlow()
     override val globalLevels: StateFlow<IntArray> = _deviceState.map { it.globalLevels }.asStateFlow()
+    override val deviceState: StateFlow<PocketMasterDeviceState> = _deviceState.asStateFlow()
 
     private var autoReconnectJob: Job? = null
     private val _deviceState = MutableStateFlow(PocketMasterDeviceState())
-
-    override val deviceState: StateFlow<PocketMasterDeviceState> = _deviceState.asStateFlow()
 
     fun onMidiDeviceConnected(device: MidiDevice) {
         scope.launch {
             try {
                 sender?.close()
+                sender = null
                 midiDevice = device
                 sender = device.openSender(device.deviceId)
                 _isConnected.value = true
