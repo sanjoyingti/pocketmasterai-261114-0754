@@ -4,7 +4,6 @@ import android.content.Context
 import android.hardware.usb.UsbManager
 import android.media.midi.MidiDevice
 import android.media.midi.MidiManager
-import android.media.midi.MidiMessage
 import android.media.midi.MidiMessageReceiver
 import android.os.Handler
 import android.os.Looper
@@ -36,7 +35,7 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
     private val _connectionStatus = MutableStateFlow("Disconnected")
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var midiDevice: MidiDevice? = null
-    private var sender: MidiDevice.Sender? = null
+    private var sender: MidiManager.MidiSender? = null
     private var receiverThread: Thread? = null
     private val receiveBuffer = ByteArrayOutputStream()
 
@@ -57,7 +56,7 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
                 sender?.close()
                 sender = null
                 midiDevice = device
-                sender = device.openSender(device.deviceId)
+                sender = midiManager.openSender(device.deviceId)
                 _isConnected.value = true
                 _connectionStatus.value = "Connected: ${device.name}"
                 startReceiveThread()
