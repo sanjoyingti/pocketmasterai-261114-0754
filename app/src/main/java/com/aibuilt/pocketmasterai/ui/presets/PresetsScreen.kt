@@ -57,7 +57,7 @@ fun PresetsScreen(
             items((1..50).map { String.format("P%02d", it) }) { slotName ->
                 PresetCard(
                     name = slotName,
-                    onClick = { viewModel.loadPreset(slotName) }
+                    onClick = { viewModel.loadPreset(slotName.removePrefix("P").toInt()) }
                 )
             }
         }

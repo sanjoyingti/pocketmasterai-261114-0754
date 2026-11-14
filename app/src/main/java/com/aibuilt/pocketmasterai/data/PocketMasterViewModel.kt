@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aibuilt.pocketmasterai.data.agent.AiMessage
 import com.aibuilt.pocketmasterai.data.agent.AiProvider
+import com.aibuilt.pocketmasterai.data.agent.AiProviderRepository
 import com.aibuilt.pocketmasterai.data.agent.AiResponseEvent
 import com.aibuilt.pocketmasterai.data.agent.AgentToolDefinitions
 import com.aibuilt.pocketmasterai.data.agent.AgentToolExecutor
@@ -23,7 +24,8 @@ import kotlinx.coroutines.launch
 class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
 
     private val device: PocketMasterDevice = container.deviceState
-    private val toolExecutor = AgentToolExecutor(this)
+    private val toolExecutor = AgentToolExecutor(container.deviceState, container)
+    private val aiProviderRepository = AiProviderRepository(container.context)
 
     private val _connectionStatus = MutableStateFlow("Disconnected")
     val connectionStatus: StateFlow<String> = _connectionStatus.asStateFlow()
@@ -132,13 +134,13 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         _isAgentBusy.value = true
         _connectionStatus.value = "Agent processing..."
 
-        val providerName = container.aiProviderRepository.getSelectedProvider().first()
-        val model = container.aiProviderRepository.getSelectedModel().first() ?: "gemini-2.0-flash"
+        val providerName = aiProviderRepository.getSelectedProvider().first()
+        val model = aiProviderRepository.getSelectedModel().first() ?: "gemini-2.0-flash"
         val apiKey = when (providerName) {
-            "openai" -> container.aiProviderRepository.getOpenAiApiKey().first() ?: ""
-            else -> container.aiProviderRepository.getGeminiApiKey().first() ?: ""
+            "openai" -> aiProviderRepository.getOpenAiApiKey().first() ?: ""
+            else -> aiProviderRepository.getGeminiApiKey().first() ?: ""
         }
-        val oauth = container.aiProviderRepository.getOauthToken().first()
+        val oauth = aiProviderRepository.getOauthToken().first()
 
         val provider: AiProvider? = when {
             providerName == "openai" && apiKey.isNotBlank() -> OpenAiCompatProvider(apiKey, "https://api.deepseek.com/v1", model)
@@ -212,9 +214,9 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun loadPreset(slot: String) {
+    fun loadPreset(slot: Int) {
         viewModelScope.launch {
-            _connectionStatus.value = "Loading $slot..."
+            _connectionStatus.value = "Loading P${slot.toString().padStart(2, '0')}..."
         }
     }
 
@@ -227,6 +229,12 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
     fun captureToneSnapshot(snapshot: ToneSnapshot) {
         viewModelScope.launch {
             container.chatHistoryRepository.saveSnapshot(snapshot.toString())
+        }
+    }
+
+    fun savePresetSlot(slot: Int) {
+        viewModelScope.launch {
+            _connectionStatus.value = "Saving preset to P${slot.toString().padStart(2, '0')}..."
         }
     }
 

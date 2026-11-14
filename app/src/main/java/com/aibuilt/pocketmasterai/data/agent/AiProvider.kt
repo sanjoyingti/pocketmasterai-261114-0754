@@ -304,55 +304,34 @@ class OpenAiCompatProvider(
     private fun findChoiceEnd(json: String): Int {
         val choicesStart = json.indexOf("\"choices\"")
         if (choicesStart < 0) return -1
-        val arrStart = json.indexOf("[", choicesStart)
-        if (arrStart < 0) return -1
-        var depth = 0
-        var i = arrStart
-        while (i < json.length) {
-            when (json[i]) {
-                '{' -> depth++
-                '}' -> {
-                    depth--
-                    if (depth == 0) return i
-                }
-            }
-            i++
-        }
-        return -1
+        val openBraces = json.indexOf('[', choicesStart)
+        if (openBraces < 0) return -1
+        val closeBraces = findMatchingBrace(json, openBraces)
+        return closeBraces
     }
 
     private fun findMatchingBrace(json: String, start: Int): Int {
         var depth = 0
-        var i = start
-        while (i < json.length) {
-            when (json[i]) {
-                '{' -> depth++
-                '}' -> {
-                    depth--
-                    if (depth == 0) return i
+        var inString = false
+        var escape = false
+        for (i in start until json.length) {
+            val c = json[i]
+            when {
+                escape -> escape = false
+                c == '\\' && inString -> escape = true
+                c == '"' -> inString = !inString
+                !inString -> {
+                    when (c) {
+                        '{', '[' -> depth++
+                        '}', ']' -> {
+                            depth--
+                            if (depth == 0) return i
+                        }
+                    }
                 }
             }
-            i++
         }
         return -1
-    }
-
-    private fun parseFunctionCallFromOpenAi(json: String, onEvent: (AiResponseEvent) -> Unit) {
-        val nameStart = json.indexOf("\"name\"")
-        if (nameStart < 0) return
-        val name = extractSimpleString(json, nameStart + "\"name\"".length) ?: return
-        val argsStart = json.indexOf("{", nameStart)
-        if (argsStart < 0) {
-            val argStart = json.indexOf("arguments\"", nameStart)
-            if (argStart < 0) return
-            val argsStr = extractStringInsideQuotes(json, argStart + "\"arguments\"".length) ?: return
-            onEvent(AiResponseEvent.ToolCall(name, parseFunctionArgs(argsStr)))
-            return
-        }
-        val argsEnd = findMatchingBrace(json, argsStart)
-        if (argsStart < 0 || argsEnd < 0) return
-        val argsJson = json.substring(argsStart + 1, argsEnd)
-        onEvent(AiResponseEvent.ToolCall(name, parseFunctionArgs(argsJson)))
     }
 
     private fun extractStringInsideQuotes(json: String, from: Int): String? {
@@ -370,34 +349,47 @@ class OpenAiCompatProvider(
         return if (end > q + 1) json.substring(q + 1, end) else null
     }
 
+    private fun parseFunctionCallFromOpenAi(funcJson: String, onEvent: (AiResponseEvent) -> Unit) {
+        val nameStart = funcJson.indexOf("\"name\"")
+        if (nameStart < 0) return
+        val name = extractSimpleString(funcJson, nameStart + "\"name\"".length) ?: return
+        val argsStart = funcJson.indexOf("{", nameStart)
+        val argsEnd = funcJson.indexOf("}", argsStart)
+        if (argsStart < 0 || argsEnd < 0) return
+        val argsJson = funcJson.substring(argsStart + 1, argsEnd)
+        val args = parseFunctionArgs(argsJson)
+        onEvent(AiResponseEvent.ToolCall(name, args))
+    }
+
     private fun String.escapeJson(): String =
         this.replace("\\", "\\\\")
             .replace("\"", "\\\"")
             .replace("\n", "\\n")
             .replace("\r", "\\r")
             .replace("\t", "\\t")
-
-    private fun String.escapeUrl(): String =
-        this.replace(" ", "%20").replace("<", "%3C").replace(">", "%3E")
-            .replace("&", "%26").replace("\"", "%22")
 }
 
-class AiProviderRepository(
-    private val context: android.content.Context
-) {
-    private val settings = SettingsRepository(context, context.dataStore)
+class AiProviderRepository(private val context: android.content.Context) {
+    private val settings = com.aibuilt.pocketmasterai.data.preference.SettingsRepository(
+        context,
+        context.dataStore
+    )
 
-    suspend fun getSelectedProvider(): String = settings.getAiProvider().first()
-    suspend fun getSelectedModel(): String? = settings.getSelectedModel().first()
-    suspend fun getGeminiApiKey(): String? = settings.getGeminiApiKey().first()
-    suspend fun getOpenAiApiKey(): String? = settings.getOpenAiApiKey().first()
-    suspend fun getOpenAiBaseUrl(): String? = settings.getOpenAiBaseUrl().first()
-    suspend fun getOauthToken(): String? = settings.getOauthToken().first()
+    suspend fun getSelectedProvider(): kotlinx.coroutines.flow.Flow<String> =
+        settings.getAiProvider()
 
-    suspend fun setProvider(provider: String) { settings.setAiProvider(provider) }
-    suspend fun setModel(model: String) { settings.setSelectedModel(model) }
-    suspend fun setGeminiApiKey(key: String) { settings.setGeminiApiKey(key) }
-    suspend fun setOpenAiApiKey(key: String) { settings.setOpenAiApiKey(key) }
-    suspend fun setOpenAiBaseUrl(url: String) { settings.setOpenAiBaseUrl(url) }
-    suspend fun setOauthToken(token: String) { settings.setOauthToken(token) }
+    suspend fun getSelectedModel(): kotlinx.coroutines.flow.Flow<String?> =
+        settings.getSelectedModel()
+
+    suspend fun getGeminiApiKey(): kotlinx.coroutines.flow.Flow<String?> =
+        settings.getGeminiApiKey()
+
+    suspend fun getOpenAiApiKey(): kotlinx.coroutines.flow.Flow<String?> =
+        settings.getOpenAiApiKey()
+
+    suspend fun getOpenAiBaseUrl(): kotlinx.coroutines.flow.Flow<String?> =
+        settings.getOpenAiBaseUrl()
+
+    suspend fun getOauthToken(): kotlinx.coroutines.flow.Flow<String?> =
+        settings.getOauthToken()
 }

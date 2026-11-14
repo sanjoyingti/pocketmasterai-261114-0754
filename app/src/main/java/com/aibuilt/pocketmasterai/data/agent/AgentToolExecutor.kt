@@ -4,7 +4,10 @@ import com.aibuilt.pocketmasterai.data.PocketMasterDevice
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
 import com.aibuilt.pocketmasterai.model.ToneSnapshot
 
-class AgentToolExecutor(private val device: PocketMasterDevice, private val container: AppContainer) {
+class AgentToolExecutor(
+    private val device: PocketMasterDevice,
+    private val container: AppContainer
+) {
 
     sealed class Result {
         data class Success(val message: String) : Result()
