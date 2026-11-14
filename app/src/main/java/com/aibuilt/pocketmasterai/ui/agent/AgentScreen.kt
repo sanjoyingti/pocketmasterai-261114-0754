@@ -42,7 +42,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
@@ -99,7 +98,11 @@ fun AgentScreen(
             RevertToneCard(onUndo = { viewModel.undoTone() })
             Spacer(modifier = Modifier.height(16.dp))
 
-            TonePreviewCard(title = "Sultans of Swing - Hard Rock Amp Mode")
+            TonePreviewCard(
+                title = "Sultans of Swing - Hard Rock Amp Mode",
+                onApply = { viewModel.applyToneToChain() },
+                onSave = { viewModel.savePresetSlot(1) }
+            )
             Spacer(modifier = Modifier.height(16.dp))
 
             MessageInput(
@@ -172,7 +175,7 @@ fun RevertToneCard(onUndo: () -> Unit) {
 }
 
 @Composable
-fun TonePreviewCard(title: String) {
+fun TonePreviewCard(title: String, onApply: () -> Unit, onSave: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -191,8 +194,8 @@ fun TonePreviewCard(title: String) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Button(onClick = {}) { Text("Apply to Pedal") }
-                Button(onClick = {}) { Text("Save to P01") }
+                Button(onClick = onApply) { Text("Apply to Pedal") }
+                Button(onClick = onSave) { Text("Save to P01") }
             }
         }
     }

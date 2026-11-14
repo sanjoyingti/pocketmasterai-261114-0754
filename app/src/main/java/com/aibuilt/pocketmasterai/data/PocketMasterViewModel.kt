@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterDevice
-import com.aibuilt.pocketmasterai.data.hardware.PocketMasterDeviceState
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -107,15 +106,33 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun saveCurrentPreset() {
+    fun undoTone() {
         viewModelScope.launch {
-            _connectionStatus.value = "Saving preset..."
+            _connectionStatus.value = "Reverting tone to last snapshot..."
         }
     }
 
-    fun loadPreset(slotName: String) {
+    fun applyToneToChain() {
         viewModelScope.launch {
-            _connectionStatus.value = "Loading $slotName..."
+            _connectionStatus.value = "Applying tone to chain..."
+        }
+    }
+
+    fun savePresetSlot(slot: Int) {
+        viewModelScope.launch {
+            _connectionStatus.value = "Saving preset to P${slot.toString().padStart(2, '0')}..."
+        }
+    }
+
+    fun loadPreset(slot: Int) {
+        viewModelScope.launch {
+            _connectionStatus.value = "Loading P${slot.toString().padStart(2, '0')}..."
+        }
+    }
+
+    fun saveCurrentPreset() {
+        viewModelScope.launch {
+            _connectionStatus.value = "Saving preset..."
         }
     }
 
