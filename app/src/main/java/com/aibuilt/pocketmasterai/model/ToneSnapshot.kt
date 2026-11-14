@@ -35,18 +35,18 @@ data class ToneSnapshot(
         stream.write(name.toByteArray())
         stream.write(0)
         stream.write(chain.size)
-        chain.forEach { stream.write(it.toByte().toInt() and 0xFF) }
+        chain.forEach { stream.write(it.toInt() and 0xFF) }
         stream.write(bypass.size)
         bypass.forEach { stream.write(it.toInt() and 0xFF) }
         stream.write(models.size)
-        models.forEach { stream.write(it.toInt() and 0xFFFF) }
+        models.forEach { stream.write(it.toInt() and 0xFF) }
         stream.write(parameters.size)
         parameters.forEach { (block, params) ->
             stream.write(block)
             stream.write(params.size)
             params.forEach { (param, value) ->
                 stream.write(param)
-                stream.write(value.toInt() and 0xFFFF)
+                stream.write(value.toInt() and 0xFF)
             }
         }
         return stream.toByteArray()
