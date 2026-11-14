@@ -5,10 +5,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -36,13 +38,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
-import com.aibuilt.pocketmasterai.data.PocketMasterContainer
 import kotlinx.coroutines.launch
 
 @Composable
 fun AgentScreen(
-    container: PocketMasterContainer,
+    container: AppContainer,
     viewModel: PocketMasterViewModel
 ) {
     val isConnected by viewModel.isConnected.collectAsState()
@@ -98,12 +100,20 @@ fun AgentScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             TonePreviewCard(title = "Sultans of Swing - Hard Rock Amp Mode")
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            MessageInput(
+                onSend = { text ->
+                    scope.launch {
+                        viewModel.sendMessage(text)
+                        snackbarHostState.showSnackbar("Command sent to agent")
+                    }
+                }
+            )
         }
     }
 }
-
-@Composable
-fun Spacer(modifier: Modifier) {}
 
 @Composable
 fun MessageCard(role: String, content: String) {
@@ -190,6 +200,7 @@ fun TonePreviewCard(title: String) {
 
 @Composable
 fun MessageInput(onSend: (String) -> Unit) {
+    var text by remember { remember { "" } }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -197,14 +208,19 @@ fun MessageInput(onSend: (String) -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedTextField(
-            value = "",
-            onValueChange = {},
+            value = text,
+            onValueChange = { text = it },
             modifier = Modifier.weight(1f),
             placeholder = { Text("Describe the tone you want...") },
             singleLine = true
         )
         Spacer(modifier = Modifier.width(8.dp))
-        Button(onClick = { onSend("placeholder input") }) {
+        Button(onClick = {
+            if (text.isNotBlank()) {
+                onSend(text)
+                text = ""
+            }
+        }) {
             Icon(imageVector = Icons.Default.Send, contentDescription = null)
         }
     }

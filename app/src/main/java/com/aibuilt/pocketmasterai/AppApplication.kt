@@ -1,6 +1,7 @@
 package com.aibuilt.pocketmasterai
 
 import android.app.Application
+import android.util.Log
 
 class AppApplication : Application() {
 

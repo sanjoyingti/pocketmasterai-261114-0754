@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.hardware.usb.UsbManager
-import com.aibuilt.pocketmasterai.data.AppContainer
 
 class UsbDeviceBroadcastReceiver : BroadcastReceiver() {
 
@@ -20,21 +19,15 @@ class UsbDeviceBroadcastReceiver : BroadcastReceiver() {
     }
 
     private fun handleDeviceChange(context: Context, attached: Boolean) {
-        val container = (context.applicationContext as? Application)?.let {
-            (it as? AppApplication)?.instance?.let { app -> AppContainer(app) }
-        } ?: return
-
-        val device = if (attached) {
-            val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
-            val deviceList = usbManager.deviceList
-            deviceList.values.firstOrNull()
-        } else {
-            null
+        val app = (context.applicationContext as? Application)?.let {
+            it as? AppApplication
         }
+        if (app == null) return
 
+        val container = AppContainer(context.applicationContext as Context)
         val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob())
         scope.launch {
-            if (attached && device != null) {
+            if (attached) {
                 container.deviceState.connect()
             } else {
                 container.deviceState.disconnect()

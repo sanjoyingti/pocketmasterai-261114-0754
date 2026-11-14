@@ -9,9 +9,7 @@ import android.media.midi.MidiMessageReceiver
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import com.aibuilt.pocketmasterai.data.local.PocketMasterDeviceState
 import java.io.ByteArrayOutputStream
-import kotlinx.coroutines.Channel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,7 +34,6 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
 
     private val _isConnected = MutableStateFlow(false)
     private val _connectionStatus = MutableStateFlow("Disconnected")
-    private val commandQueue = Channel<ByteArray>(Channel.BUFFERED)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var midiDevice: MidiDevice? = null
     private var sender: MidiDevice.Sender? = null
@@ -47,16 +44,13 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
     override val chain: StateFlow<IntArray> = _deviceState.map { it.chain }.asStateFlow()
     override val bypass: StateFlow<ByteArray> = _deviceState.map { it.bypass }.asStateFlow()
     override val models: StateFlow<ShortArray> = _deviceState.map { it.models }.asStateFlow()
-    override val params: StateFlow<HashMap<Int, HashMap<Int, Short>>> = _deviceState.map { it.params }.asStateFlow()
     override val name: StateFlow<String> = _deviceState.map { it.name }.asStateFlow()
     override val globalLevels: StateFlow<IntArray> = _deviceState.map { it.globalLevels }.asStateFlow()
-    override val lastReceivedCommands: StateFlow<List<ByteArray>> = MutableStateFlow(emptyList()).asStateFlow()
 
     private var autoReconnectJob: Job? = null
+    private val _deviceState = MutableStateFlow(PocketMasterDeviceState())
 
     override val deviceState: StateFlow<PocketMasterDeviceState> = _deviceState.asStateFlow()
-
-    private val _deviceState = MutableStateFlow(PocketMasterDeviceState())
 
     fun onMidiDeviceConnected(device: MidiDevice) {
         scope.launch {
@@ -107,7 +101,8 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
         stopReceiveThread()
         receiverThread = Thread {
             try {
-                val device = midiManager.openDevice(sender?.device?.deviceId ?: return@Thread)
+                val deviceId = sender?.device?.deviceId ?: return@Thread
+                val device = midiManager.openDevice(deviceId)
                 val receiver = object : MidiMessageReceiver {
                     override fun receive(msg: MidiMessage) {
                         val data = msg.data
@@ -163,11 +158,9 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
             if (decode != null && decode.isValid) {
                 updateDeviceState(decode)
             }
-            val cmd = frame.copyOfRange(0, frame.size)
-            lastReceivedCommands.value = (lastReceivedCommands.value + cmd).takeLast(50)
-            if (cmd.size > 3) {
-                val op = cmd[3].toInt() and 0xFF
-                handleCommandResponse(op, cmd)
+            if (frame.size > 3) {
+                val op = frame[3].toInt() and 0xFF
+                handleCommandResponse(op, frame)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Frame decode error", e)
@@ -190,7 +183,6 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
                 chain = IntArray(9) { i -> i },
                 bypass = newBypass,
                 models = newModels,
-                params = HashMap(),
                 name = dump.name,
                 globalLevels = intArrayOf(0, 0, 0)
             )
@@ -199,7 +191,6 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
 
     private fun handleCommandResponse(op: Int, cmd: ByteArray) {
         when (op) {
-            PocketMasterProtocol.OP_EDIT_BUFFER_DUMP -> {}
             PocketMasterProtocol.OP_SET_BLOCK_STATE -> {
                 val block = cmd[4].toInt() and 0xFF
                 val bypassed = cmd[5].toInt() and 0xFF == 1
@@ -218,17 +209,6 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
                     val newModels = current.models.copyOf()
                     newModels[block] = mid.toShort()
                     _deviceState.value = current.copy(models = newModels)
-                }
-            }
-            PocketMasterProtocol.OP_SET_PARAMETER -> {
-                val block = cmd[4].toInt() and 0xFF
-                val pid = ((cmd[5].toInt() and 0xFF) shl 8) or (cmd[6].toInt() and 0xFF)
-                val value = ((cmd[7].toInt() and 0xFF) shl 8) or (cmd[8].toInt() and 0xFF)
-                scope.launch(Dispatchers.Main) {
-                    val current = _deviceState.value
-                    val newParams = current.params.toMutableMap()
-                    newParams.getOrPut(block) { HashMap() }[pid] = value.toShort()
-                    _deviceState.value = current.copy(params = newParams)
                 }
             }
             PocketMasterProtocol.OP_CHAIN_REORDER -> {
@@ -295,10 +275,6 @@ class PocketMasterMidiManager(private val context: Context) : PocketMasterDevice
 
     override suspend fun receiveBytes(buffer: ByteArray): Int {
         return 0
-    }
-
-    override suspend fun processCommand(cmd: ByteArray): Boolean {
-        return sendBytes(cmd) > 0
     }
 
     override fun toString(): String {

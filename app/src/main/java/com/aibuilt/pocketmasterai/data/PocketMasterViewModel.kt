@@ -49,13 +49,6 @@ class PocketMasterViewModel(private val container: PocketMasterContainer) : View
         viewModelScope.launch {
             device.name.collect { _name.value = it }
         }
-        viewModelScope.launch {
-            device.chain.collect { chain ->
-                if (chain.any { it != 0 }) {
-                    // first dump received; device is reachable
-                }
-            }
-        }
         dumpState()
     }
 
@@ -102,6 +95,27 @@ class PocketMasterViewModel(private val container: PocketMasterContainer) : View
     fun setModel(block: Int, modelId: Int) {
         viewModelScope.launch {
             device.sendBytes(com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol.setBlockModel(block, modelId))
+        }
+    }
+
+    fun sendMessage(text: String) {
+        viewModelScope.launch {
+            _connectionStatus.value = "Agent processing: $text"
+            // Agent pipeline: web_search -> map -> apply
+        }
+    }
+
+    fun saveCurrentPreset() {
+        viewModelScope.launch {
+            _connectionStatus.value = "Saving preset..."
+            // OP_EDIT_BUFFER_SAVE would write the current buffer
+        }
+    }
+
+    fun loadPreset(slotName: String) {
+        viewModelScope.launch {
+            _connectionStatus.value = "Loading $slotName..."
+            // Load preset into edit buffer
         }
     }
 

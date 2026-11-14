@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,15 +28,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
-import com.aibuilt.pocketmasterai.data.PocketMasterContainer
 
 @Composable
 fun PresetsScreen(
-    container: com.aibuilt.pocketmasterai.data.PocketMasterContainer,
+    container: AppContainer,
     viewModel: PocketMasterViewModel
 ) {
     val name by viewModel.name.collectAsState()
@@ -50,7 +50,7 @@ fun PresetsScreen(
         Text("Current tone name: $name")
         Spacer(modifier = Modifier.height(8.dp))
         if (isConnected) {
-            Button(onClick = { /* save to hardware buffer via OP_EDIT_BUFFER_SAVE */ }) {
+            Button(onClick = { viewModel.saveCurrentPreset() }) {
                 Text("Save to Hardware")
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -64,16 +64,13 @@ fun PresetsScreen(
             items(slots) { slotName ->
                 PresetCard(
                     name = slotName,
-                    onClick = { /* load preset Pxx from hardware */ }
+                    onClick = { viewModel.loadPreset(slotName) }
                 )
             }
         }
     }
     SnackbarHost(hostState = snackbarHostState)
 }
-
-@Composable
-fun Spacer(modifier: Modifier) {}
 
 @Composable
 fun PresetCard(name: String, onClick: () -> Unit) {

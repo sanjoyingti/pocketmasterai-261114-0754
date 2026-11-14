@@ -8,12 +8,14 @@ import android.hardware.usb.UsbManager
 import android.media.midi.MidiDevice
 import android.media.midi.MidiManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Chat
@@ -26,14 +28,17 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavStackEntry
@@ -41,9 +46,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.aibuilt.pocketmasterai.data.FakePocketMasterDevice
-import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
-import com.aibuilt.pocketmasterai.data.PocketMasterContainer
 import com.aibuilt.pocketmasterai.ui.chain.ChainScreen
 import com.aibuilt.pocketmasterai.ui.presets.PresetsScreen
 import com.aibuilt.pocketmasterai.ui.settings.SettingsScreen
@@ -51,66 +53,46 @@ import com.aibuilt.pocketmasterai.ui.agent.AgentScreen
 
 class MainActivity : ComponentActivity() {
 
+    private val usbManager by lazy {
+        getSystemService(Context.USB_SERVICE) as UsbManager
+    }
+
     private val midiManager by lazy {
         getSystemService(Context.MIDI_SERVICE) as MidiManager
     }
 
-    private val usbPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            viewModel<PocketMasterViewModel>().requestDevice()
-        }
-    }
-
-    private val deviceAttachedFilter = IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED).apply {
-        addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-        addAction(UsbManager.ACTION_USB_ACCESSORY_ATTACHED)
-        addAction(UsbManager.ACTION_USB_ACCESSORY_DETACHED)
-    }
-
-    private val usbReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                UsbManager.ACTION_USB_DEVICE_ATTACHED, UsbManager.ACTION_USB_ACCESSORY_ATTACHED -> {
-                    viewModel<PocketMasterViewModel>().requestDevice()
-                }
-                UsbManager.ACTION_USB_DEVICE_DETACHED, UsbManager.ACTION_USB_ACCESSORY_DETACHED -> {
-                    viewModel<PocketMasterViewModel>().disconnect()
-                }
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        registerReceiver(usbReceiver, deviceAttachedFilter)
         enableEdgeToEdge()
         setContent {
-            val container = remember { PocketMasterContainer(applicationContext) }
-            val viewModel = viewModel<PocketMasterViewModel>(
-                factory = PocketMasterViewModel.Factory(container)
-            )
+            val container = remember { AppContainer(applicationContext) }
+            val viewModel = ViewModelProvider(
+                this,
+                PocketMasterViewModel.Factory(container)
+            )[PocketMasterViewModel::class]
             PocketMasterApp(container = container, viewModel = viewModel)
         }
     }
 
     override fun onResume() {
         super.onResume()
-        viewModel<PocketMasterViewModel>().requestDevice()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        unregisterReceiver(usbReceiver)
+        val viewModel = ViewModelProvider(
+            this,
+            PocketMasterViewModel.Factory(AppContainer(applicationContext))
+        )[PocketMasterViewModel::class]
+        viewModel.requestDevice()
     }
 }
 
 @Composable
-fun PocketMasterApp(container: PocketMasterContainer, viewModel: PocketMasterViewModel) {
+fun PocketMasterApp(container: AppContainer, viewModel: PocketMasterViewModel) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    LaunchedEffect(Unit) {
+        container.loadDeviceMap(assetManager)
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

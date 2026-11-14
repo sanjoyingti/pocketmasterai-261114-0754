@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,26 +28,21 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
-import com.aibuilt.pocketmasterai.data.PocketMasterContainer
-import kotlinx.coroutines.launch
-import com.aibuilt.pocketmasterai.data.PocketMasterProtocol
-import com.aibuilt.pocketmasterai.data.PocketMasterDevice
 
 @Composable
 fun ChainScreen(
-    container: PocketMasterContainer,
+    container: AppContainer,
     viewModel: PocketMasterViewModel,
 ) {
     val state by viewModel.connectionStatus.collectAsState()
@@ -54,8 +50,6 @@ fun ChainScreen(
     val bypass by viewModel.bypass.collectAsState()
     val models by viewModel.models.collectAsState()
     val name by viewModel.name.collectAsState()
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
 
     if (!isConnected) {
         Column(
@@ -73,7 +67,7 @@ fun ChainScreen(
             }
             Text(text = state, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
         }
-        SnackbarHost(hostState = snackbarHostState)
+        SnackbarHost(hostState = remember { SnackbarHostState() })
         return
     }
 
@@ -107,7 +101,7 @@ fun ChainScreen(
                 Text("Disconnect")
             }
             Text(
-                text = "Bypass",
+                text = "All Bypass",
                 style = MaterialTheme.typography.labelMedium
             )
             Switch(
@@ -118,11 +112,10 @@ fun ChainScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 9-block visual chain (fixed positions: NR FX1 DRV AMP IR EQ FX2 DLY RVB)
         Text("Signal Chain", style = MaterialTheme.typography.titleMedium)
 
         ChainRow(
-            blocks = listOf(PocketMasterDevice.BLOCK_NR, PocketMasterDevice.BLOCK_FX1, PocketMasterDevice.BLOCK_DRV),
+            blocks = listOf(0, 1, 2),
             models = models,
             bypass = bypass,
             onToggle = { block -> viewModel.toggleBypass(block) },
@@ -132,7 +125,7 @@ fun ChainScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         ChainRow(
-            blocks = listOf(PocketMasterDevice.BLOCK_AMP, PocketMasterDevice.BLOCK_IR, PocketMasterDevice.BLOCK_EQ),
+            blocks = listOf(3, 4, 5),
             models = models,
             bypass = bypass,
             onToggle = { block -> viewModel.toggleBypass(block) },
@@ -142,7 +135,7 @@ fun ChainScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         ChainRow(
-            blocks = listOf(PocketMasterDevice.BLOCK_FX2, PocketMasterDevice.BLOCK_DLY, PocketMasterDevice.BLOCK_RVB),
+            blocks = listOf(6, 7, 8),
             models = models,
             bypass = bypass,
             onToggle = { block -> viewModel.toggleBypass(block) },
@@ -204,7 +197,7 @@ fun PedalBlock(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = PocketMasterProtocol.getBlockLabel(block),
+                    text = getBlockLabel(block),
                     style = MaterialTheme.typography.labelMedium,
                     color = if (bypassed) Color.Gray else MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -236,7 +229,7 @@ fun PedalBlock(
 
 @Composable
 fun IconButton(
-    icon: ImageVector,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit
 ) {
     Box(
@@ -254,6 +247,3 @@ fun IconButton(
         )
     }
 }
-
-@Composable
-fun Spacer(modifier: Modifier) { }
