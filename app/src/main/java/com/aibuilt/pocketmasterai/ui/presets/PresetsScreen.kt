@@ -18,18 +18,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
 
@@ -40,9 +36,6 @@ fun PresetsScreen(
 ) {
     val name by viewModel.name.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    val slots = (1..50).map { String.format("P%02d", it) }
 
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Text("Presets - P01 to P50", style = MaterialTheme.typography.headlineSmall)
@@ -61,7 +54,7 @@ fun PresetsScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(slots) { slotName ->
+            items((1..50).map { String.format("P%02d", it) }) { slotName ->
                 PresetCard(
                     name = slotName,
                     onClick = { viewModel.loadPreset(slotName) }
@@ -69,7 +62,6 @@ fun PresetsScreen(
             }
         }
     }
-    SnackbarHost(hostState = snackbarHostState)
 }
 
 @Composable

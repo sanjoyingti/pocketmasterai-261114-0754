@@ -1,4 +1,4 @@
-package com.aibuilt.pocketmasterai.data
+package com.aibuilt.pocketmasterai
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -29,6 +29,9 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
 
     private val _name = MutableStateFlow(device.name.value)
     val name: StateFlow<String> = _name.asStateFlow()
+
+    private val _chatText = MutableStateFlow("")
+    val chatText: StateFlow<String> = _chatText.asStateFlow()
 
     init {
         observeDevice()
@@ -89,7 +92,7 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             val current = device.bypass.value[block].toInt()
             val newBypass = (1 - current).toByte()
-            device.sendBytes(PocketMasterProtocol.setBlockState(block, newBypass == 1))
+            device.sendBytes(PocketMasterProtocol.setBlockState(block, newBypass == 1.toByte()))
         }
     }
 
@@ -99,24 +102,25 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    fun setChatText(text: String) {
+        _chatText.value = text
+    }
+
     fun sendMessage(text: String) {
         viewModelScope.launch {
             _connectionStatus.value = "Agent processing: $text"
-            // Agent pipeline: web_search -> map -> apply
         }
     }
 
     fun saveCurrentPreset() {
         viewModelScope.launch {
             _connectionStatus.value = "Saving preset..."
-            // OP_EDIT_BUFFER_SAVE would write the current buffer
         }
     }
 
     fun loadPreset(slotName: String) {
         viewModelScope.launch {
             _connectionStatus.value = "Loading $slotName..."
-            // Load preset into edit buffer
         }
     }
 
@@ -129,3 +133,6 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 }
+
+fun PocketMasterViewModelFactory(container: AppContainer): ViewModelProvider.Factory =
+    PocketMasterViewModel.Factory(container)

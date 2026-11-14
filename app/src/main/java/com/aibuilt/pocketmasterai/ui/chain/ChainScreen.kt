@@ -23,27 +23,23 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
 
 @Composable
 fun ChainScreen(
     container: AppContainer,
-    viewModel: PocketMasterViewModel,
+    viewModel: PocketMasterViewModel
 ) {
     val state by viewModel.connectionStatus.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
@@ -67,7 +63,6 @@ fun ChainScreen(
             }
             Text(text = state, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
         }
-        SnackbarHost(hostState = remember { SnackbarHostState() })
         return
     }
 
@@ -82,7 +77,7 @@ fun ChainScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Pocket Master - $name", style = MaterialTheme.typography.headlineSmall)
-            Text("MIDI Channel: $state", style = MaterialTheme.typography.bodySmall)
+            Text("MIDI: $state", style = MaterialTheme.typography.bodySmall)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -105,8 +100,12 @@ fun ChainScreen(
                 style = MaterialTheme.typography.labelMedium
             )
             Switch(
-                checked = bypass.any { it == 1.toByte() },
-                onCheckedChange = {}
+                checked = bypass.any { it.toInt() == 1 },
+                onCheckedChange = { allBypass ->
+                    for (i in 0..8) {
+                        viewModel.toggleBypass(i)
+                    }
+                }
             )
         }
 
@@ -161,7 +160,7 @@ fun ChainRow(
             PedalBlock(
                 block = block,
                 model = models[block].toInt(),
-                bypassed = bypass[block] == 1.toByte(),
+                bypassed = bypass[block].toInt() == 1,
                 onToggle = { onToggle(block) },
                 onSetModel = { model -> onSetModel(block, model) }
             )
@@ -197,7 +196,7 @@ fun PedalBlock(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = getBlockLabel(block),
+                    text = PocketMasterProtocol.getBlockLabel(block),
                     style = MaterialTheme.typography.labelMedium,
                     color = if (bypassed) Color.Gray else MaterialTheme.colorScheme.onPrimaryContainer
                 )

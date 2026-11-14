@@ -8,10 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
 import com.aibuilt.pocketmasterai.ui.theme.PocketMasterTheme
 import kotlinx.coroutines.launch
@@ -29,25 +27,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val container = remember { AppContainer(applicationContext) }
+        val viewModel = ViewModelProvider(
+            this,
+            PocketMasterViewModel.Factory(container)
+        )[PocketMasterViewModel::class]
         setContent {
-            val container = remember { AppContainer(applicationContext) }
-            val viewModel = ViewModelProvider(
-                this,
-                PocketMasterViewModel.Factory(container)
-            )[PocketMasterViewModel::class]
             PocketMasterTheme {
                 PocketMasterApp(container = container, viewModel = viewModel)
             }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // request device discovery on resume (real USB MIDI device or simulator)
-        val viewModel = ViewModelProvider(
-            this,
-            PocketMasterViewModel.Factory(AppContainer(applicationContext))
-        )[PocketMasterViewModel::class]
-        viewModel.requestDevice()
     }
 }

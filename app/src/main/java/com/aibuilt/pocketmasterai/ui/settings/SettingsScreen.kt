@@ -18,19 +18,17 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
 
@@ -40,7 +38,6 @@ fun SettingsScreen(
     viewModel: PocketMasterViewModel
 ) {
     val isConnected by viewModel.isConnected.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
 
     Column(
         modifier = Modifier
@@ -62,7 +59,7 @@ fun SettingsScreen(
 
         Text("Hardware Simulation", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
-        SimulationCard(isEnabled = true, onToggle = {})
+        SimulationCard(isEnabled = container.useSimulator, onToggle = { container.useSimulator = it })
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -76,7 +73,6 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(8.dp))
         SearchSourceCard(source = "duckduckgo", onChange = {})
     }
-    SnackbarHost(hostState = snackbarHostState)
 }
 
 @Composable
@@ -108,7 +104,7 @@ fun SimulationCard(isEnabled: Boolean, onToggle: (Boolean) -> Unit) {
             Text("Use Fake PocketMaster simulator", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
             Switch(
-                checked = !isEnabled,
+                checked = isEnabled,
                 onCheckedChange = onToggle
             )
             Text(

@@ -7,7 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.room.Room
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterDevice
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterMidiManager
-import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
+import com.aibuilt.pocketmasterai.data.hardware.FakePocketMasterDevice
 import com.aibuilt.pocketmasterai.data.local.PocketMasterDatabase
 import com.aibuilt.pocketmasterai.data.local.dao.ChatDao
 import com.aibuilt.pocketmasterai.data.local.dao.ToneSnapshotDao
@@ -19,14 +19,16 @@ import androidx.datastore.preferences.preferencesDataStore
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "pocketmaster_settings")
 
-class AppContainer(private val appContext: Context) {
-    val settingsRepository = SettingsRepository(appContext, appContext.dataStore)
-    val chatHistoryRepository = ChatHistoryRepository(appContext)
+class AppContainer(appContext: Context) {
+    private val context = appContext.applicationContext
+
+    val settingsRepository = SettingsRepository(context, context.dataStore)
+    val chatHistoryRepository = ChatHistoryRepository(context)
     val deviceMapRepository = DeviceMapRepository()
 
     private val database by lazy {
         Room.databaseBuilder(
-            appContext.applicationContext,
+            context,
             PocketMasterDatabase::class.java,
             "pocketmaster.db"
         ).build()
@@ -38,31 +40,40 @@ class AppContainer(private val appContext: Context) {
     val toneSnapshotDao: ToneSnapshotDao
         get() = database.toneSnapshotDao()
 
-    private val device: PocketMasterDevice by lazy {
-        PocketMasterMidiManager(appContext)
+    private val midiDevice by lazy {
+        PocketMasterMidiManager(context)
     }
+
+    private val fakeDevice = FakePocketMasterDevice()
+
+    var useSimulator: Boolean = false
+        set(value) {
+            field = value
+            if (value) _device = fakeDevice else _device = midiDevice
+        }
+
+    private var _device: PocketMasterDevice by lazy {
+        midiDevice
+    }
+        private set
 
     val deviceState: PocketMasterDevice
-        get() = device
+        get() = _device
 
     val deviceName: String
-        get() = when (device) {
-            is PocketMasterMidiManager -> "Real MIDI Device"
-            is FakePocketMasterDevice -> "Fake PocketMaster Simulator"
-            else -> "Unknown Device"
-        }
+        get() = if (useSimulator) "Fake PocketMaster Simulator" else "Sonicake Pocket Master (USB OTG MIDI)"
 
-    suspend fun setDeviceSimulator(enabled: Boolean) {
-        if (enabled) {
-            // Replace with simulator - requires re-instantiation in real app
-        }
-    }
-
-    fun getDeviceMap(): DeviceMapRepository? = deviceMapRepository
+    val assetManager: AssetManager
+        get() = context.assets
 
     suspend fun loadDeviceMap(assetManager: AssetManager) {
         withContext(Dispatchers.IO) {
-            deviceMapRepository.setMap(deviceMapRepository.loadFromAssets(assetManager))
+            try {
+                val map = deviceMapRepository.loadFromAssets(assetManager)
+                deviceMapRepository.setMap(map)
+            } catch (e: Exception) {
+                // Device map may not be present; device still functions
+            }
         }
     }
 }

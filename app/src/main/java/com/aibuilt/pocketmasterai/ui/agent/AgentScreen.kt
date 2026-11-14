@@ -25,19 +25,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
 import kotlinx.coroutines.launch
@@ -48,12 +44,10 @@ fun AgentScreen(
     viewModel: PocketMasterViewModel
 ) {
     val isConnected by viewModel.isConnected.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
+    val scope = rememberCoroutineScopeHolder().scope
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -80,34 +74,28 @@ fun AgentScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             MessageCard(role = "system", content = "Connected to Sonicake Pocket Master simulator")
-
             Spacer(modifier = Modifier.height(8.dp))
 
             MessageCard(role = "user", content = "Set all settings to match Sultans of Swing")
-
             Spacer(modifier = Modifier.height(8.dp))
 
             ToolStatusPill(text = "Searching rig specs for 'Sultans of Swing'...")
             ToolStatusPill(text = "Mapping pedals to Sonicake Pocket Master blocks")
             ToolStatusPill(text = "Applying chain: NR -> COMP -> DRV -> AMP -> IR -> EQ -> MOD -> DLY -> RVB")
-
             Spacer(modifier = Modifier.height(16.dp))
 
             Text("Undo / Revert Tone", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
             RevertToneCard()
-
             Spacer(modifier = Modifier.height(16.dp))
 
             TonePreviewCard(title = "Sultans of Swing - Hard Rock Amp Mode")
-
             Spacer(modifier = Modifier.height(16.dp))
 
             MessageInput(
                 onSend = { text ->
                     scope.launch {
                         viewModel.sendMessage(text)
-                        snackbarHostState.showSnackbar("Command sent to agent")
                     }
                 }
             )
@@ -191,8 +179,8 @@ fun TonePreviewCard(title: String) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Button(onClick = { }) { Text("Apply to Pedal") }
-                Button(onClick = { }) { Text("Save to P01") }
+                Button(onClick = {}) { Text("Apply to Pedal") }
+                Button(onClick = {}) { Text("Save to P01") }
             }
         }
     }
@@ -222,6 +210,16 @@ fun MessageInput(onSend: (String) -> Unit) {
             }
         }) {
             Icon(imageVector = Icons.Default.Send, contentDescription = null)
+        }
+    }
+}
+
+@Composable
+fun rememberCoroutineScopeHolder(): androidx.compose.runtime.State kotlinx.coroutines.CoroutineScope {
+    return remember {
+        androidx.compose.runtime.snapshots.SnapshotStateMap<String, Any?>().let {
+            it["scope"] = androidx.compose.runtime.SideEffectScope()
+            it
         }
     }
 }
