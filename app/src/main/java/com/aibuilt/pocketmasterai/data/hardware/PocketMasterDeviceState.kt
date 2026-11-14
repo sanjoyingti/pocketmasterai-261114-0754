@@ -5,5 +5,6 @@ data class PocketMasterDeviceState(
     val bypass: ByteArray = ByteArray(9) { 0 },
     val models: ShortArray = ShortArray(9) { 0 },
     val name: String = "USER001",
-    val globalLevels: IntArray = intArrayOf(0, 0, 0)
+    val globalLevels: IntArray = intArrayOf(0, 0, 0),
+    val parameters: Map<Int, Map<Int, Short>> = emptyMap()
 )

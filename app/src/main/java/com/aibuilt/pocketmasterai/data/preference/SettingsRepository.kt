@@ -18,6 +18,7 @@ class SettingsRepository(
         private val KEY_AI_PROVIDER = stringPreferencesKey("ai_provider")
         private val KEY_OAUTH_TOKEN = stringPreferencesKey("oauth_token")
         private val KEY_SEARCH_SOURCE = stringPreferencesKey("search_source")
+        private val KEY_LAST_DEVICE_NAME = stringPreferencesKey("last_device_name")
     }
 
     fun getGeminiApiKey(): Flow<String?> = dataStore.data.map { it[KEY_GEMINI_API_KEY] }
@@ -30,6 +31,9 @@ class SettingsRepository(
     fun getOauthToken(): Flow<String?> = dataStore.data.map { it[KEY_OAUTH_TOKEN] }
     fun getSearchSource(): Flow<String> = dataStore.data.map {
         it[KEY_SEARCH_SOURCE] ?: "duckduckgo"
+    }
+    fun lastDeviceName(): Flow<String> = dataStore.data.map {
+        it[KEY_LAST_DEVICE_NAME] ?: ""
     }
 
     suspend fun setGeminiApiKey(key: String) {
@@ -58,6 +62,10 @@ class SettingsRepository(
 
     suspend fun setSearchSource(source: String) {
         dataStore.edit { it[KEY_SEARCH_SOURCE] = source }
+    }
+
+    suspend fun setLastDeviceName(name: String) {
+        dataStore.edit { it[KEY_LAST_DEVICE_NAME] = name }
     }
 
     suspend fun clearAll() {

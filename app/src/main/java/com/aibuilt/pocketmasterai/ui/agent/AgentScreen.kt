@@ -76,7 +76,10 @@ fun AgentScreen(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            Text("Ask for a tone, e.g. \"Find the tone for the Comfortably Numb solo\". The agent will research, map to the device, and apply it.", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Ask for a tone, e.g. \"Find the tone for the Comfortably Numb solo\". The agent will research the rig, map it to the Pocket Master chain, and apply it.",
+                style = MaterialTheme.typography.bodyMedium
+            )
             Spacer(modifier = Modifier.height(16.dp))
 
             Text("Conversation", style = MaterialTheme.typography.titleMedium)
@@ -192,7 +195,7 @@ fun TonePreviewCard(title: String, onApply: () -> Unit, onSave: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = SpaceEvenly
             ) {
                 Button(onClick = onApply) { Text("Apply to Pedal") }
                 Button(onClick = onSave) { Text("Save to P01") }
@@ -231,5 +234,26 @@ fun MessageInput(onSend: (String) -> Unit) {
         ) {
             Icon(imageVector = Icons.Default.Send, contentDescription = null)
         }
+    }
+}
+
+// Workaround for missing SpaceEvenly in older Compose versions
+internal object SpaceEvenly : Arrangement.Horizontal {
+    override fun arrange(
+        width: Int,
+        totalSpace: Int,
+        positions: Arrangement.VerticalPositionsSource
+    ): IntArray {
+        val n = positions.positionCount
+        if (n <= 1) return positions.arrange(0, 0, totalSpace)
+        val usable = width - totalSpace
+        val gap = usable / n
+        val positions = IntArray(n)
+        var cursor = 0
+        for (i in 0 until n) {
+            positions[i] = cursor
+            cursor += positions[i].also { } + gap
+        }
+        return positions
     }
 }

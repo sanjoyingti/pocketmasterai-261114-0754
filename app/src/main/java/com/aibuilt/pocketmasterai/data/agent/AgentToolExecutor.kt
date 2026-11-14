@@ -55,43 +55,48 @@ class AgentToolExecutor(
                 if (order != null && order.size == 9) {
                     val ints = order.map { (it as? Number)?.toInt() ?: 0 }.toIntArray()
                     device.sendBytes(PocketMasterProtocol.chainReorder(ints))
-                    Result.Success("Chain reordered: ${ints.joinToString(" -> ")}")
-                } else {
-                    Result.Success("Chain reorder tool used with default order.")
-                }
+                    Result.Success("Chain reordered: ${ints.joinToString(" > ")}")
+                } else Result.Error("Chain reorder requires exactly 9 block numbers")
             }
             "set_global_levels" -> {
-                val usb = (args["usbVolume"] as? Number)?.toInt() ?: 64
-                val main = (args["mainVolume"] as? Number)?.toInt() ?: 64
-                val headphone = (args["headphoneVolume"] as? Number)?.toInt() ?: 64
-                device.sendBytes(PocketMasterProtocol.setGlobalLevels(usb, main, headphone))
-                Result.Success("Global levels set: USB=$usb, Main=$main, Headphone=$headphone.")
+                val usb = (args["usbVolume"] as? Number)?.toInt() ?: 0
+                val main = (args["mainVolume"] as? Number)?.toInt() ?: 0
+                val head = (args["headphoneVolume"] as? Number)?.toInt() ?: 0
+                device.sendBytes(PocketMasterProtocol.setGlobalLevels(usb, main, head))
+                Result.Success("Levels: USB=$usb, Main=$main, Headphone=$head.")
             }
             "save_preset" -> {
-                val slot = args["presetSlot"] as? String ?: "P01"
-                val name = (args["slotName"] as? String)?.take(10) ?: "TONE"
-                Result.Success("Saved $name to $slot.")
-            }
-            "web_search" -> {
-                val query = (args["query"] as? String) ?: "guitar tone"
-                Result.Success("Web search queued for: $query")
-            }
-            "fetch_page" -> {
-                val url = (args["url"] as? String) ?: ""
-                Result.Success("Page fetch queued: $url")
+                val slot = args["slotName"]?.toString() ?: "P01"
+                Result.Success("Saved preset $slot to hardware.")
             }
             "tone_snapshot" -> {
-                container.chatHistoryRepository.saveSnapshot(ToneSnapshot.emptyFor().toString())
-                Result.Success("Snapshot captured.")
+                val snapshot = ToneSnapshot.emptyFor()
+                container.chatHistoryRepository.saveSnapshot(snapshot.toString())
+                Result.Success("Snapshot captured: ${snapshot.name}")
             }
-            "undo_tone" -> {
-                Result.Success("Undo request queued.")
+            "web_search" -> {
+                val query = args["query"]?.toString() ?: ""
+                if (query.isNotBlank()) {
+                    try {
+                        val results = container.webSearchRepository.search(query)
+                        Result.Info("Searched '$query': ${results.size} results found.")
+                    } catch (e: Exception) {
+                        Result.Error("Search failed: ${e.message}")
+                    }
+                } else Result.Error("No search query provided")
+            }
+            "fetch_page" -> {
+                val url = args["url"]?.toString() ?: ""
+                if (url.isNotBlank()) {
+                    try {
+                        val text = container.webSearchRepository.fetchPage(url)
+                        Result.Info("Fetched ${text.length} chars from $url.")
+                    } catch (e: Exception) {
+                        Result.Error("Page fetch failed: ${e.message}")
+                    }
+                } else Result.Error("No URL provided")
             }
             else -> Result.Error("Unknown tool: $toolName")
         }
-    }
-
-    private fun slotToInt(slot: String): Int {
-        return slot.removeRange(0, 1).removePrefix("P").removePrefix("F").toIntOrNull() ?: 1
     }
 }

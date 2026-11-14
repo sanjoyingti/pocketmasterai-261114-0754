@@ -21,7 +21,7 @@ class WebSearchService(private val context: Context) {
             .url("https://html.duckduckgo.com/html/?q=$encoded")
             .get()
             .build()
-        val html = client.newCall(request).execute().use { it.body?.string() } ?: return emptyList()
+        val html = client.newCall(request).execute().use { it.body?.string() ?: return emptyList() }
         val doc = Jsoup.parse(html)
         val results = mutableListOf<WebSearchResult>()
         doc.select("a.result__a").forEach { a ->

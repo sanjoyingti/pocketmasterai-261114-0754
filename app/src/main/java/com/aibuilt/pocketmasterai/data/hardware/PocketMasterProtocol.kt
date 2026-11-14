@@ -30,21 +30,21 @@ object PocketMasterProtocol {
 
     private fun buildSysex(payload: ByteArray): ByteArray {
         val frame = ByteArray(payload.size + 3)
-        frame[0] = SYSEX_START
+        frame[0] = SYSEX_START.toByte()
         frame[1] = SYSEX_ID.toByte()
         frame[2] = DEVICE_ID.toByte()
         payload.copyInto(frame, 3)
-        frame[frame.size - 1] = SYSEX_END
+        frame[frame.size - 1] = SYSEX_END.toByte()
         return frame
     }
 
-    fun editBufferDumpRequest(): ByteArray = buildCommand(OP_EDIT_BUFFER_DUMP.toByte(), ByteArray(0))
+    fun editBufferDumpRequest(): ByteArray = buildCommand(OP_EDIT_BUFFER_DUMP, ByteArray(0))
 
     fun setBlockState(block: Int, bypassed: Boolean): ByteArray {
         val p = ByteArray(2)
         p[0] = block.toByte()
-        p[1] = if (bypassed) 0x01 else 0x00
-        return buildCommand(OP_SET_BLOCK_STATE.toByte(), p)
+        p[1] = if (bypassed) 0x01.toByte() else 0x00.toByte()
+        return buildCommand(OP_SET_BLOCK_STATE, p)
     }
 
     fun setBlockModel(block: Int, modelId: Int): ByteArray {
@@ -52,7 +52,7 @@ object PocketMasterProtocol {
         p[0] = block.toByte()
         p[1] = ((modelId ushr 8) and 0xFF).toByte()
         p[2] = (modelId and 0xFF).toByte()
-        return buildCommand(OP_SET_BLOCK_MODEL.toByte(), p)
+        return buildCommand(OP_SET_BLOCK_MODEL, p)
     }
 
     fun setParameter(block: Int, paramId: Int, value: Short): ByteArray {
@@ -60,15 +60,15 @@ object PocketMasterProtocol {
         p[0] = block.toByte()
         p[1] = ((paramId ushr 8) and 0xFF).toByte()
         p[2] = (paramId and 0xFF).toByte()
-        p[3] = (value and 0xFF).toByte()
-        return buildCommand(OP_SET_PARAMETER.toByte(), p)
+        p[3] = (value.toInt() and 0xFF).toByte()
+        return buildCommand(OP_SET_PARAMETER, p)
     }
 
     fun chainReorder(order: IntArray): ByteArray {
         require(order.size == NUM_BLOCKS) { "Chain must have 9 blocks" }
         val p = ByteArray(NUM_BLOCKS)
         order.forEachIndexed { i, b -> p[i] = b.toByte() }
-        return buildCommand(OP_CHAIN_REORDER.toByte(), p)
+        return buildCommand(OP_CHAIN_REORDER, p)
     }
 
     fun setGlobalLevels(usb: Int, main: Int, headphone: Int): ByteArray {
@@ -76,11 +76,14 @@ object PocketMasterProtocol {
         p[0] = usb.toByte()
         p[1] = main.toByte()
         p[2] = headphone.toByte()
-        return buildCommand(OP_SET_GLOBAL_LEVELS.toByte(), p)
+        return buildCommand(OP_SET_GLOBAL_LEVELS, p)
+    }
+
+    fun saveEditBuffer(slot: Byte): ByteArray {
+        return buildCommand(OP_EDIT_BUFFER_SAVE, ByteArray(1) { slot })
     }
 
     fun decodeEditBufferDump(frame: ByteArray): EditBufferDump? {
-        // Expect: F0 7E 53 00 <14 nibbles> <6 name bytes> F7
         if (frame.size < 24 || frame[0] != SYSEX_START.toByte()
             || frame[1] != SYSEX_ID.toByte() || frame[2] != DEVICE_ID.toByte()
             || frame[3] != OP_EDIT_BUFFER_DUMP.toByte()) {
@@ -89,9 +92,11 @@ object PocketMasterProtocol {
         val payload = frame.copyOfRange(4, frame.size - 1)
         if (payload.size < 20) return null
         val nameBytes = payload.copyOfRange(14, 20)
-        val name = nameBytes.joinToString("") {
-            val c = it.toInt() and 0x7F
-            if (c == 0x20.toByte().toInt()) "" else c.toChar().toString()
+        val name = buildString {
+            for (b in nameBytes) {
+                val c = b.toInt() and 0x7F
+                if (c != 0x20) append(c.toChar())
+            }
         }
         return EditBufferDump(
             isValid = true,
