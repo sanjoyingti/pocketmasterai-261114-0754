@@ -72,7 +72,7 @@ class GeminiProvider(
             }
             val toolsDef = if (tools.isNotEmpty()) {
                 "{\"tools\":[{\"functionDeclarations\":[${tools.joinToString(",") { t ->
-                    "{\"name\":\"${t.name}\",\"description\":\"${t.description}\",\"parameters\":{\"type\":\"object\",\"properties\":{\"block\":{\"type\":\"integer\"},\"modelId\":{\"type\":\"integer\"},\"value\":{\"type\":\"integer\"},\"presetSlot\":{\"type\":\"string\"},\"query\":{\"type\":\"string\"},\"url\":{\"type\":\"string\"},\"bypassed\":{\"type\":\"boolean\"},\"slotName\":{\"type\":\"string\"},\"usbVolume\":{\"type\":\"integer\"},\"mainVolume\":{\"type\":\"integer\"},\"headphoneVolume\":{\"type\":\"integer\"}}}}"
+                    "{\"name\":\"${t.name}\",\"description\":\"${t.description}\",\"parameters\":{\"type\":\"object\",\"properties\":{\"block\":{\"type\":\"integer\"},\"modelId\":{\"type\":\"integer\"},\"paramId\":{\"type\":\"integer\"},\"value\":{\"type\":\"integer\"},\"presetSlot\":{\"type\":\"string\"},\"query\":{\"type\":\"string\"},\"url\":{\"type\":\"string\"},\"bypassed\":{\"type\":\"boolean\"},\"slotName\":{\"type\":\"string\"},\"usbVolume\":{\"type\":\"integer\"},\"mainVolume\":{\"type\":\"integer\"},\"headphoneVolume\":{\"type\":\"integer\"},\"order\":{\"type\":\"array\"}}}}"
                 }}]}}]"
             } else "null"
 
@@ -244,11 +244,11 @@ class OpenAiCompatProvider(
                         append("{\"type\":\"function\",\"function\":{\"name\":\"${t.name}\",")
                         append("\"description\":\"${t.description}\",")
                         append("\"parameters\":{\"type\":\"object\",\"properties\":{\"block\":{\"type\":\"integer\"},")
-                        append("\"modelId\":{\"type\":\"integer\"},\"value\":{\"type\":\"integer\"},")
+                        append("\"modelId\":{\"type\":\"integer\"},\"paramId\":{\"type\":\"integer\"},\"value\":{\"type\":\"integer\"},")
                         append("\"presetSlot\":{\"type\":\"string\"},\"query\":{\"type\":\"string\"},")
                         append("\"url\":{\"type\":\"string\"},\"bypassed\":{\"type\":\"boolean\"},")
                         append("\"slotName\":{\"type\":\"string\"},\"usbVolume\":{\"type\":\"integer\"},")
-                        append("\"mainVolume\":{\"type\":\"integer\"},\"headphoneVolume\":{\"type\":\"integer\"}}}}")
+                        append("\"mainVolume\":{\"type\":\"integer\"},\"headphoneVolume\":{\"type\":\"integer\"},\"order\":{\"type\":\"array\"}}}}")
                     }
                 }.joinToString(",")
             } else "null"
@@ -367,29 +367,4 @@ class OpenAiCompatProvider(
             .replace("\n", "\\n")
             .replace("\r", "\\r")
             .replace("\t", "\\t")
-}
-
-class AiProviderRepository(private val context: android.content.Context) {
-    private val settings = com.aibuilt.pocketmasterai.data.preference.SettingsRepository(
-        context,
-        context.dataStore
-    )
-
-    suspend fun getSelectedProvider(): kotlinx.coroutines.flow.Flow<String> =
-        settings.getAiProvider()
-
-    suspend fun getSelectedModel(): kotlinx.coroutines.flow.Flow<String?> =
-        settings.getSelectedModel()
-
-    suspend fun getGeminiApiKey(): kotlinx.coroutines.flow.Flow<String?> =
-        settings.getGeminiApiKey()
-
-    suspend fun getOpenAiApiKey(): kotlinx.coroutines.flow.Flow<String?> =
-        settings.getOpenAiApiKey()
-
-    suspend fun getOpenAiBaseUrl(): kotlinx.coroutines.flow.Flow<String?> =
-        settings.getOpenAiBaseUrl()
-
-    suspend fun getOauthToken(): kotlinx.coroutines.flow.Flow<String?> =
-        settings.getOauthToken()
 }

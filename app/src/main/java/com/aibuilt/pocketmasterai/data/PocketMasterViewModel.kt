@@ -5,10 +5,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.aibuilt.pocketmasterai.data.agent.AiMessage
 import com.aibuilt.pocketmasterai.data.agent.AiProvider
-import com.aibuilt.pocketmasterai.data.agent.AiProviderRepository
 import com.aibuilt.pocketmasterai.data.agent.AiResponseEvent
 import com.aibuilt.pocketmasterai.data.agent.AgentToolDefinitions
 import com.aibuilt.pocketmasterai.data.agent.AgentToolExecutor
+import com.aibuilt.pocketmasterai.data.agent.GeminiProvider
 import com.aibuilt.pocketmasterai.data.agent.OpenAiCompatProvider
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterDevice
 import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
@@ -141,8 +141,7 @@ class PocketMasterViewModel(private val container: AppContainer) : ViewModel() {
                 if (apiKey.isNotBlank()) OpenAiCompatProvider(apiKey, baseUrl, model) else null
             }
             apiKey.isNotBlank() -> {
-                // Gemini provider needs a real Gemini key; if oauth only, fall back to info message
-                if (oauth != null) GeminiProvider(oauth, null, model) else null
+                if (oauth != null) GeminiProvider(apiKey, oauth, model) else null
             }
             else -> null
         }

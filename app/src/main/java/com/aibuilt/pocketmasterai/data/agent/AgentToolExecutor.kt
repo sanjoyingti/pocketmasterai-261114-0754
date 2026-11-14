@@ -50,66 +50,78 @@ class AgentToolExecutor(
             }
             "set_parameter" -> {
                 val block = args["block"] as? Int ?: -1
-                val value = (args["value"] as? Number)?.toShort() ?: 0
-                if (block in 0..8) {
-                    device.sendBytes(PocketMasterProtocol.setParameter(block, 0, value))
-                    Result.Success("Block ${PocketMasterProtocol.getBlockLabel(block)} parameter set to $value")
+                val paramId = (args["paramId"] as? Number)?.toInt() ?: 0
+                val value = (args["value"] as? Number)?.toInt() ?: 0
+                if (block in 0..8 && paramId in 0..255 && value in 0..127) {
+                    device.sendBytes(PocketMasterProtocol.setParameter(block, paramId, value.toShort()))
+                    Result.Success("Block ${PocketMasterProtocol.getBlockLabel(block)} param $paramId = $value")
                 } else {
-                    Result.Error("Invalid block: $block")
+                    Result.Error("Invalid param: block $block, paramId $paramId, value $value")
                 }
             }
             "set_chain_reorder" -> {
-                val order = args["order"] as? List<*>
-                if (order != null && order.size == 9) {
-                    val ints = order.map { (it as? Number)?.toInt() ?: 0 }.toIntArray()
-                    device.sendBytes(PocketMasterProtocol.chainReorder(ints))
-                    Result.Success("Chain reordered: ${ints.joinToString(" -> ")}")
+                val order = (args["order"] as? List<*>)?.map { it as? Int }?.toIntArray() ?: IntArray(9) { it }
+                if (order.size == 9 && order.all { it in 0..8 }) {
+                    device.sendBytes(PocketMasterProtocol.chainReorder(order))
+                    Result.Success("Chain reordered: ${order.joinToString(" -> ")}")
                 } else {
-                    Result.Error("Chain reorder requires 9 block indices")
+                    Result.Error("Invalid chain order: must contain 0-8 exactly once")
                 }
             }
             "set_global_levels" -> {
                 val usb = (args["usbVolume"] as? Number)?.toInt() ?: 0
                 val main = (args["mainVolume"] as? Number)?.toInt() ?: 0
-                val head = (args["headphoneVolume"] as? Number)?.toInt() ?: 0
-                device.sendBytes(PocketMasterProtocol.setGlobalLevels(usb, main, head))
-                Result.Success("Global levels set: USB=$usb, Main=$main, Headphone=$head")
+                val headphone = (args["headphoneVolume"] as? Number)?.toInt() ?: 0
+                if (usb in 0..100 && main in 0..100 && headphone in 0..100) {
+                    device.sendBytes(PocketMasterProtocol.setGlobalLevels(usb, main, headphone))
+                    Result.Success("Global levels set: USB=$usb, Main=$main, Headphone=$headphone")
+                } else {
+                    Result.Error("Volumes must be 0-100")
+                }
             }
             "save_preset" -> {
-                val slotName = (args["slotName"] as? String) ?: "P01"
-                val slot = if (slotName.startsWith("P")) slotName.removePrefix("P").toInt() else 1
+                val slotName = args["slotName"] as? String ?: "P01"
+                val slot = slotName.removePrefix("P").toIntOrNull() ?: 1
                 if (slot in 1..50) {
                     device.sendBytes(PocketMasterProtocol.saveEditBuffer(slot.toByte()))
-                    Result.Success("Saved preset to $slotName")
+                    Result.Success("Preset $slotName saved")
                 } else {
-                    Result.Error("Invalid preset slot: $slotName (use P01-P50)")
-                }
-            }
-            "web_search" -> {
-                val query = args["query"] as? String ?: "guitar tone"
-                container.webSearchRepository.search(query).take(3).joinToString("\n") {
-                    "${it.title} - ${it.url}"
-                }
-                Result.Info("Searched for: $query")
-            }
-            "fetch_page" -> {
-                val url = args["url"] as? String ?: ""
-                if (url.isNotBlank()) {
-                    Result.Info("Fetched: ${container.webSearchRepository.fetchPage(url).take(300)}")
-                } else {
-                    Result.Error("No URL provided")
+                    Result.Error("Slot must be P01-P50")
                 }
             }
             "tone_snapshot" -> {
-                val snapshot = ToneSnapshot.fromDeviceState(
-                    chain = device.chain.value,
-                    bypass = device.bypass.value,
-                    models = device.models.value,
-                    parameters = emptyMap(),
-                    name = device.name.value
-                )
-                container.chatHistoryRepository.saveSnapshot(snapshot.toString())
-                Result.Info("Tone snapshot saved (undo available in chat).")
+                try {
+                    val snapshot = ToneSnapshot.fromDeviceState(
+                        chain = device.chain.value,
+                        bypass = device.bypass.value,
+                        models = device.models.value,
+                        name = device.name.value,
+                        parameters = device.deviceState.value?.parameters ?: emptyMap()
+                    )
+                    container.chatHistoryRepository.saveSnapshot(snapshot.toString())
+                    Result.Success("Snapshot saved: ${snapshot.toString().take(60)}...")
+                } catch (e: Exception) {
+                    Result.Error("Failed to save snapshot: ${e.message}")
+                }
+            }
+            "web_search" -> {
+                try {
+                    val query = args["query"] as? String ?: ""
+                    val results = container.webSearchRepository.search(query)
+                    val summary = results.joinToString("\n") { "${it.title} - ${it.url}" }
+                    Result.Success("Search returned ${results.size} results:\n$summary")
+                } catch (e: Exception) {
+                    Result.Error("Web search failed: ${e.message}")
+                }
+            }
+            "fetch_page" -> {
+                try {
+                    val url = args["url"] as? String ?: ""
+                    val text = container.webSearchRepository.fetchPage(url)
+                    Result.Success("Page fetched (${text.take(120).replace("\n", " ")})")
+                } catch (e: Exception) {
+                    Result.Error("Failed to fetch page: ${e.message}")
+                }
             }
             else -> Result.Error("Unknown tool: $toolName")
         }
