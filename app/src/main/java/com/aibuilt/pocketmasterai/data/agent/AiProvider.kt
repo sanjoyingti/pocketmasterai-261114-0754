@@ -59,7 +59,7 @@ class GeminiProvider(
             val allMessages = listOf(systemMsg) + messages
             val contentParts = allMessages.map { part ->
                 buildString {
-                    append("{\"role\": \"${it.role}\", \"parts\": [{\"text\": \"${it.content.replace("\\", "\\\\")}\"}]}")
+                    append("{\"role\": \"${part.role}\", \"parts\": [{\"text\": \"${part.content.replace("\\", "\\\\")}\"}]}")
                 }
             }
             val toolsDef = if (tools.isNotEmpty()) {
@@ -102,7 +102,6 @@ class GeminiProvider(
             .replace("\"", "%22").replace("'", "%27").replace("+", "%2B")
 
     private fun parseGeminiResponse(body: String, onEvent: (AiResponseEvent) -> Unit) {
-        // Extract the JSON object between the first "{" and the last "}".
         val start = body.indexOf('{')
         val end = body.lastIndexOf('}')
         val json = if (start >= 0 && end > start) body.substring(start, end + 1) else body
@@ -167,7 +166,6 @@ class GeminiProvider(
             val valueStart = json.indexOf('{', colon)
             val valueEnd = json.indexOf('}', valueStart)
             if (valueStart < 0 || valueEnd < 0) {
-                // scalar value
                 val valStart = colon + 1
                 val valEnd = json.indexOf(',', valueStart)
                 val raw = json.substring(valStart, if (valEnd < 0) json.length else valEnd).trim()
@@ -267,34 +265,28 @@ class OpenAiCompatProvider(
                 put("max_tokens", 4096)
                 if (toolsDef != null) put("tools", toolsDef)
             }
-            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.encodeToString(
-                kotlinx.serialization.json.JsonArray.serializer(),
-                kotlinx.serialization.json.JsonArray(emptyList())
+            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.encodeToString(kotlinx.serialization.SerializableSerializer(kotlinx.serialization.json.JsonElement), kotlinx.serialization.json.Json.parseToJsonElement(kotlinx.serialization.json.Json.encodeToString(body)).jsonPrimitive.content)
+            val url = "$apiBase"
+            val headers = mutableMapOf(
+                "Content-Type" to "application/json",
+                "Authorization" to "Bearer $apiKey"
             )
-            val requestBody = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.encodeToString(
-                object : kotlinx.serialization.KSerializer<Map<String, Any?>> {
-                    override val serialName = "map"
-                    override fun serialize(encoder: kotlinx.serialization.Encoder, value: Map<String, Any?>) {
-                        encoder.encodeSerializableValue(kotlinx.serialization.json.JsonPrimitive.serializer(), kotlinx.serialization.json.JsonPrimitive(kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.Json {}, value).toString()))
-                    }
-                    override fun deserialize(decoder: kotlinx.serialization.Decoder): Map<String, Any?> = emptyMap()
-                },
-                body
-            )
+
             val request = okhttp3.Request.Builder()
-                .url(apiBase)
-                .post(requestBody.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .header("Authorization", "Bearer $apiKey")
-                .header("Content-Type", "application/json")
+                .url(url)
+                .post(json.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .headers(okhttp3.Headers.of(headers))
                 .build()
+
             val response = okHttpClient.newCall(request).execute()
-            val responseString = response.body?.string()
+            val responseBody = response.body?.string()
             response.close()
-            if (!response.isSuccessful || responseString.isNullOrBlank()) {
-                onEvent(AiResponseEvent.Error("API error: ${response.code}"))
+            if (!response.isSuccessful || responseBody.isNullOrBlank()) {
+                onEvent(AiResponseEvent.Error("API error: ${response.code} ${response.message}"))
                 return
             }
-            parseOpenAiResponse(responseString, onEvent)
+
+            parseOpenAiResponse(responseBody, onEvent)
             onEvent(AiResponseEvent.Done)
         } catch (e: Exception) {
             onEvent(AiResponseEvent.Error(e.message ?: "Generation failed"))
@@ -302,18 +294,52 @@ class OpenAiCompatProvider(
     }
 
     private fun parseOpenAiResponse(body: String, onEvent: (AiResponseEvent) -> Unit) {
-        val content = body.substringAfter("\"content\":\"").takeWhile { it != '"' }
-            .replace("\\n", "\n")
-        if (content.isNotEmpty()) onEvent(AiResponseEvent.TextChunk(content))
-        val fnameStart = body.indexOf("\"name\"")
-        if (fnameStart >= 0) {
-            val fname = body.substring(fnameStart + "\"name\"".length).takeWhile { it != '"' }
-            val argsStart = body.indexOf("{", fnameStart)
-            val argsEnd = body.indexOf("}", argsStart)
-            if (argsStart >= 0 && argsEnd > argsStart) {
-                val args = parseFunctionArgs(body.substring(argsStart + 1, argsEnd))
-                onEvent(AiResponseEvent.ToolCall(fname, args))
+        val start = body.indexOf('{')
+        val end = body.lastIndexOf('}')
+        val json = if (start >= 0 && end > start) body.substring(start, end + 1) else body
+        val choiceStart = json.indexOf("\"choices\"")
+        if (choiceStart >= 0) {
+            val choiceBlock = json.substring(choiceStart)
+            val toolCallsStart = choiceBlock.indexOf("\"tool_calls\"")
+            if (toolCallsStart >= 0) {
+                val toolCallsBlock = choiceBlock.substring(toolCallsStart)
+                extractOpenAiToolCalls(toolCallsBlock, onEvent)
+                return
+            }
+            val text = extractOpenAiText(choiceBlock)
+            if (text.isNotEmpty()) {
+                onEvent(AiResponseEvent.TextChunk(text))
             }
         }
+    }
+
+    private fun extractOpenAiToolCalls(block: String, onEvent: (AiResponseEvent) -> Unit) {
+        var pos = 0
+        while (pos < block.length) {
+            val objStart = block.indexOf("{", pos)
+            if (objStart < 0) break
+            val objEnd = block.indexOf("}", objStart)
+            if (objEnd < 0) break
+            val obj = block.substring(objStart, objEnd + 1)
+            val nameStart = obj.indexOf("\"name\"")
+            if (nameStart >= 0) {
+                val name = extractSimpleString(obj, nameStart + "\"name\"".length) ?: break
+                val argsStart = obj.indexOf("{", nameStart)
+                val argsEnd = obj.lastIndexOf("}", obj)
+                if (argsStart > 0 && argsEnd > argsStart) {
+                    val argsJson = obj.substring(argsStart + 1, argsEnd)
+                    val args = parseFunctionArgs(argsJson)
+                    onEvent(AiResponseEvent.ToolCall(name, args))
+                }
+            }
+            pos = objEnd + 1
+        }
+    }
+
+    private fun extractOpenAiText(block: String): String {
+        val textStart = block.indexOf("\"content\": \"")
+        if (textStart < 0) return ""
+        val after = block.substring(textStart + "\"content\": \"".length)
+        return after.takeWhile { it != '"' }.replace("\\n", "\n").replace("\\\"", "\"")
     }
 }
