@@ -35,13 +35,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.aibuilt.pocketmasterai.data.AppContainer
 import com.aibuilt.pocketmasterai.data.PocketMasterViewModel
+import com.aibuilt.pocketmasterai.data.hardware.PocketMasterProtocol
 
 @Composable
 fun ChainScreen(
     container: AppContainer,
     viewModel: PocketMasterViewModel
 ) {
-    val state by viewModel.connectionStatus.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
     val bypass by viewModel.bypass.collectAsState()
     val models by viewModel.models.collectAsState()
@@ -61,7 +61,7 @@ fun ChainScreen(
             Button(onClick = { viewModel.requestDevice() }) {
                 Text("Find Hardware")
             }
-            Text(text = state, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+            Text(text = "Connecting...", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
         }
         return
     }
@@ -77,7 +77,7 @@ fun ChainScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Pocket Master - $name", style = MaterialTheme.typography.headlineSmall)
-            Text("MIDI: $state", style = MaterialTheme.typography.bodySmall)
+            Text("MIDI: Connected", style = MaterialTheme.typography.bodySmall)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
